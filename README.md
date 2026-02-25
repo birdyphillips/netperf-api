@@ -1,8 +1,40 @@
 # NetPerf API v2.0
 
-REST API for Network Performance Testing - ByteBlower, PacketStorm, iPerf3, and SpeedTest automation via HTTP endpoints.
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![Flask](https://img.shields.io/badge/Flask-3.0%2B-green.svg)](https://flask.palletsprojects.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-netperf--api-black.svg)](https://github.com/birdyphillips/netperf-api)
 
-## Quick Start
+REST API for automated network performance testing with ByteBlower, iPerf3, PacketStorm, and SpeedTest. Provides HTTP endpoints for running comprehensive network tests with SNMP monitoring, RTT configuration, and multi-scenario support.
+
+## 🚀 Features
+
+- **16 REST API Endpoints** - Complete HTTP interface for all test operations
+- **ByteBlower Integration** - Automated traffic generation and analysis
+- **iPerf3 Support** - Linux (TCP/Prague) and macOS (Apple QUIC/L4S) testing
+- **PacketStorm RTT** - Configurable round-trip time emulation
+- **SpeedTest** - Multi-client speed testing (Linux, macOS, Windows)
+- **SNMP Monitoring** - Automatic before/after data collection with delta analysis
+- **Async Execution** - Background test execution with status polling
+- **Result Management** - UUID-based result identification, ZIP downloads, file browsing
+- **Multi-Scenario** - Run multiple test scenarios in single API call
+- **CORS Enabled** - Ready for web frontend integration
+- **Postman Collection** - Pre-configured API testing collection included
+
+## 📋 Table of Contents
+
+- [Quick Start](#-quick-start)
+- [API Endpoints](#-api-endpoints)
+- [Test Types](#-test-types)
+- [Usage Examples](#-usage-examples)
+- [Scenarios](#-scenarios)
+- [Advanced Usage](#-advanced-usage)
+- [Configuration](#-configuration)
+- [Postman Collection](#-postman-collection)
+- [Architecture](#-architecture)
+- [Contributing](#-contributing)
+
+## 🎯 Quick Start
 
 ### 1. Install Dependencies
 ```bash
@@ -29,7 +61,70 @@ tail -f api.log
 
 Server runs on `http://0.0.0.0:5000`
 
-## API Endpoints
+## 📡 API Endpoints
+
+### Health & Configuration
+- `GET /health` - Health check
+- `POST /api/config/modem` - Set modem IPv6 for SNMP
+
+### Test Execution
+- `POST /api/byteblower/run` - ByteBlower tests
+- `POST /api/iperf3/run` - iPerf3 tests (Linux/macOS)
+- `POST /api/speedtest/run` - SpeedTest
+- `POST /api/packetstorm/start` - Start RTT config
+- `POST /api/packetstorm/stop` - Stop RTT config
+
+### SNMP
+- `POST /api/snmp/collect` - Manual SNMP collection
+- `GET /api/results/{result_id}/snmp` - SNMP analysis with deltas
+
+### Test Management
+- `GET /api/test/status/{test_id}` - Async test status
+- `GET /api/test/list` - List all tests
+
+### Results
+- `GET /api/results` - List all results
+- `GET /api/results/{result_id}` - Get result files
+- `GET /api/results/{result_id}/download` - Download ZIP
+- `GET /api/results/{result_id}/download/{file_path}` - Download file
+
+### Resources
+- `GET /api/bb_flows` - List ByteBlower flows
+
+**Total: 16 endpoints**
+
+---
+
+## 🧪 Test Types
+
+### ByteBlower
+High-performance traffic generation and analysis with:
+- Multiple traffic scenarios (US/DS, Classic/LL/Combined)
+- Configurable RTT via PacketStorm
+- HTML/PDF/CSV/JSON/Excel report generation
+- Automatic SNMP collection per iteration
+
+### iPerf3
+**Linux:** TCP (cubic/prague) and UDP testing
+**macOS:** Apple QUIC with L4S support
+- Multi-scenario support
+- Configurable iterations
+- Platform-specific optimizations
+
+### PacketStorm
+RTT emulation for latency testing:
+- Start/stop configurations
+- Multiple RTT profiles (10ms, 20ms, 30ms, etc.)
+
+### SpeedTest
+Multi-client speed testing:
+- Linux, macOS, Windows (NVIDIA) clients
+- Parallel execution
+- Configurable iterations
+
+---
+
+## 📚 API Endpoints
 
 ### Health Check
 ```bash
@@ -534,7 +629,7 @@ GET /api/bb_flows
 
 ---
 
-## Usage Examples
+## 💻 Usage Examples
 
 ### Python
 ```python
@@ -645,7 +740,7 @@ const results = await fetch(`${BASE_URL}/api/results`).then(r => r.json());
 console.log(results.results);
 ```
 
-## Scenarios
+## 🎯 Scenarios
 
 All endpoints support these scenarios:
 - `US_Classic_Only` - Upstream Classic (4 TCP + 1 UDP)
@@ -667,7 +762,7 @@ All endpoints support these scenarios:
 ✅ **Platform support**: Linux and macOS iPerf3 with Apple QUIC/L4S
 ✅ **Multi-client SpeedTest**: Linux, macOS, and Windows NVIDIA clients
 
-## Advanced Usage
+## 🚀 Advanced Usage
 
 ### Run All SCN RTT Tests (36 combinations)
 ```python
@@ -758,7 +853,7 @@ HTTP Status Codes:
 - `404` - Not Found
 - `500` - Internal Server Error
 
-## Configuration
+## ⚙️ Configuration
 
 Edit `config.yaml` for:
 - ByteBlower CLI path
@@ -807,7 +902,7 @@ sudo systemctl enable netperf-api
 sudo systemctl start netperf-api
 ```
 
-## Postman Collection
+## 📦 Postman Collection
 
 Import `NetPerf_API.postman_collection.json` into Postman for pre-configured requests.
 
@@ -816,7 +911,7 @@ Import `NetPerf_API.postman_collection.json` into Postman for pre-configured req
 - `modem_ipv6`: `2605:1c00:50f2:203:a49d:6fa2:3d34:7329`
 - `result_id`: `c3865f92-d53d-4d05-bc0e-a5b516f0afff`
 
-## Key Features
+## 🔑 Key Features
 
 ✅ **Exact CLI behavior** - Same folder structure and SNMP collection as CLI tool
 ✅ **SNMP integration** - Automatic before/after collection per iteration
@@ -825,12 +920,133 @@ Import `NetPerf_API.postman_collection.json` into Postman for pre-configured req
 ✅ **Background execution** - Tests run asynchronously via API
 ✅ **CORS enabled** - Ready for web frontend integration
 
-## Version History
+## 🏗️ Architecture
 
-### v2.0 (2025-02-25)
-- REST API matching exact CLI execution flow
-- SNMP collection in scenario-specific subdirectories
-- Folder and file download endpoints
-- ByteBlower flow listing
-- Background server management scripts
-- Postman collection included
+### Technology Stack
+- **Backend:** Python 3.8+, Flask 3.0+
+- **Testing:** ByteBlower CLI, iPerf3, Ookla SpeedTest
+- **Network:** PacketStorm RTT emulation, SNMP v2c
+- **Data:** YAML config, JSON API, CSV/Excel reports
+
+### Components
+```
+netperf_api/
+├── app.py                 # Flask REST API server
+├── byteblower_logic.py    # ByteBlower test orchestration
+├── iperf3_logic.py        # iPerf3 test execution
+├── packetstorm_logic.py   # RTT configuration
+├── speedtest_logic.py     # SpeedTest execution
+├── snmp_collector.py      # SNMP data collection
+├── config_loader.py       # Configuration management
+├── logger.py              # Logging system
+└── bb_flows/              # ByteBlower flow definitions
+```
+
+### Test Flow
+1. **Configuration** - Set modem IPv6 via `/api/config/modem`
+2. **Execution** - POST to test endpoint (sync or async)
+3. **SNMP Collection** - Automatic before/after capture
+4. **Results** - UUID-based result identification
+5. **Analysis** - SNMP delta calculations, report generation
+6. **Download** - ZIP archives or individual files
+
+---
+
+## 📊 SNMP Monitoring
+
+Automatic SNMP collection provides network interface metrics:
+
+### Metrics Collected
+- `ifHCInOctets` / `ifHCOutOctets` - High capacity byte counters
+- `ifInUcastPkts` / `ifOutUcastPkts` - Unicast packet counters
+- `ifInDiscards` / `ifOutDiscards` - Discard counters
+- `ifInErrors` / `ifOutErrors` - Error counters
+
+### Analysis Endpoint
+```bash
+GET /api/results/{result_id}/snmp
+```
+
+Returns before/after/delta values for all metrics per iteration.
+
+---
+
+## 🔧 Development
+
+### Prerequisites
+- Python 3.8+
+- ByteBlower CLI installed
+- iPerf3 installed on test clients/servers
+- PacketStorm access (optional)
+- SNMP v2c enabled on test devices
+
+### Installation
+```bash
+git clone git@github.com:birdyphillips/netperf-api.git
+cd netperf-api
+pip install -r requirements.txt
+cp config.yaml.example config.yaml
+# Edit config.yaml with your settings
+./start_api.sh
+```
+
+### Running Tests
+```bash
+# Health check
+curl http://localhost:5000/health
+
+# Set modem IPv6
+curl -X POST http://localhost:5000/api/config/modem \
+  -H "Content-Type: application/json" \
+  -d '{"ipv6": "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"}'
+
+# Run ByteBlower test
+curl -X POST http://localhost:5000/api/byteblower/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bbp_file": "Port_20_example.bbp",
+    "scenario": "US_Classic_Only",
+    "test_group_name": "TEST",
+    "iterations": 1
+  }'
+```
+
+---
+
+## 📝 API Documentation
+
+Full API documentation with request/response examples is available in the [README.md](README.md).
+
+Import the [Postman Collection](NetPerf_API.postman_collection.json) for interactive API testing.
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+---
+
+## 📝 License
+
+MIT License - see LICENSE file for details
+
+---
+
+## 👤 Author
+
+**birdyphillips**
+- GitHub: [@birdyphillips](https://github.com/birdyphillips)
+- Repository: [netperf-api](https://github.com/birdyphillips/netperf-api)
+
+---
+
+## ⭐ Support
+
+If you find this project useful, please consider giving it a star on GitHub!
+
+---
