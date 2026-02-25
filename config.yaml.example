@@ -1,0 +1,104 @@
+# NetPerf Orchestrator Configuration Example
+# Network Performance Testing Orchestration Tool
+# Copy this file to config.yaml and edit values for your environment
+
+# ByteBlower Configuration
+byteblower:
+  # Path to ByteBlower CLI executable
+  cli_path: "/home/aphillips/Projects/ByteBlower/ByteBlower-CLT"
+  # Directory containing .bbp flow files
+  bb_flows_dir: "bb_flows"
+
+# PacketStorm Configuration
+packetstorm:
+  # PacketStorm REST API URL
+  url: "http://10.241.0.118/xgui/rest"
+  # PacketStorm API credentials
+  username: "automation"
+  password: "automation"
+  # API request timeout in seconds
+  timeout: 30
+
+# iPerf3 Linux Client Configuration
+iperf3_linux:
+  client:
+    # Linux client IP address
+    host: "96.37.176.19"
+    # SSH username for Linux client
+    username: "lld"
+    # SSH password for Linux client
+    password: "aqm@2024"
+  server:
+    # Linux server IP address
+    host: "71.85.92.86"
+    # SSH username for Linux server
+    username: "lld"
+    # SSH password for Linux server
+    password: "aqm@2024"
+  # iPerf3 server ports for Linux (Classic, Prague, UDP Classic, UDP LL)
+  ports: [9202, 9205, 9206, 9210]
+
+# iPerf3 macOS Client Configuration (Apple QUIC/L4S)
+iperf3_macos:
+  client:
+    # macOS client IP address
+    host: "96.37.176.11"
+    # SSH username for macOS client
+    username: "lld_mac_client"
+    # SSH password for macOS client
+    password: "aqm@2022"
+  server:
+    # macOS server IP address
+    host: "71.85.92.83"
+    # SSH username for macOS server
+    username: "mac_studio_server"
+    # SSH password for macOS server
+    password: "aqm@2022"
+  # iPerf3 server ports for macOS (QUIC, QUIC L4S, UDP, UDP L4S)
+  ports: [9201, 9207, 9209, 9211]
+
+# SpeedTest Client Configuration
+speedtest:
+  linux:
+    # Linux SpeedTest client IP
+    host: "96.37.176.7"
+    # SSH username
+    username: "lld"
+    # SSH password
+    password: "aqm@2024"
+  macos:
+    # macOS SpeedTest client IP
+    host: "96.37.176.11"
+    # SSH username
+    username: "lld_mac_client"
+    # SSH password
+    password: "aqm@2022"
+  nvidia:
+    # Windows NVIDIA client IP
+    host: "96.37.176.14"
+    # SSH username (Windows)
+    username: "Administrator"
+    # SSH password (Windows)
+    password: "aqm@2022"
+
+# SNMP Configuration
+snmp:
+  # Jump server for SNMP access
+  jumpserver: "ctec-jump.ctec.charterlab.com"
+  # SSH username for jump server
+  username: "aphillips"
+  # SNMP community string
+  community: "open"
+  # SNMP timeout in seconds
+  timeout: 5
+  # SNMP retry count
+  retries: 2
+
+# SSH Configuration
+ssh:
+  # Path to SSH private key (supports ~ expansion)
+  key_path: "~/.ssh/lld_key"
+  # SSH connection timeout in seconds
+  connect_timeout: 20
+  # SSH command execution timeout in seconds
+  command_timeout: 30

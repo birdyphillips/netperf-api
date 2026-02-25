@@ -1,0 +1,18 @@
+# LLD Test CLI Tool - Python Dependencies
+
+# Configuration file parsing
+pyyaml>=6.0
+
+# SSH and remote execution
+paramiko>=2.11.0
+
+# Data processing and Excel export
+pandas>=1.5.0
+openpyxl>=3.0.10
+
+# Flask API
+flask>=2.3.0
+flask-cors>=4.0.0
+
+# Optional: For enhanced logging
+# colorlog>=6.7.0

@@ -1,0 +1,526 @@
+#!/usr/bin/env python3
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+import os
+import glob
+from datetime import datetime
+from byteblower_logic import ByteBlowerLogic
+from packetstorm_logic import PacketStormLogic
+from iperf3_logic import IPerf3Logic
+from speedtest_logic import SpeedTestLogic
+from snmp_collector import collect_snmp_data
+from logger import Logger
+import shutil
+import tempfile
+import re
+import threading
+import uuid
+
+app = Flask(__name__)
+CORS(app)
+logger = Logger("FlaskAPI")
+
+modem_ipv6 = None
+running_tests = {}  # Store test status
+result_registry = {}  # Map result_id to folder path
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
+
+@app.route('/api/config/modem', methods=['POST'])
+def set_modem():
+    global modem_ipv6
+    data = request.json
+    if not data:
+        return jsonify({"error": "Request body is required"}), 400
+    
+    modem_ipv6 = data.get('ipv6')
+    if not modem_ipv6:
+        return jsonify({"error": "ipv6 is required"}), 400
+    
+    logger.info(f"Modem IPv6 configured: {modem_ipv6}")
+    return jsonify({"message": "Modem IPv6 set", "ipv6": modem_ipv6}), 200
+
+def run_snmp_collection(target_ip, test_name, phase, output_dir):
+    try:
+        logger.info(f"Running SNMP collection - {phase} {test_name}")
+        collect_snmp_data(target_ip, test_name, phase, output_dir)
+        return True
+    except Exception as e:
+        logger.error(f"SNMP collection failed: {e}")
+        return False
+
+@app.route('/api/byteblower/run', methods=['POST'])
+def run_byteblower():
+    data = request.json
+    if not data:
+        return jsonify({"error": "Request body is required"}), 400
+    
+    bbp_file = data.get('bbp_file')
+    scenarios = data.get('scenario')
+    test_group_name = data.get('test_group_name')
+    iterations = data.get('iterations', 1)
+    rtt_configs = data.get('rtt_config', '')
+    async_mode = data.get('async', False)
+    
+    if not all([bbp_file, scenarios, test_group_name]):
+        return jsonify({"error": "bbp_file, scenario, and test_group_name are required"}), 400
+    
+    if not modem_ipv6:
+        logger.warning("ByteBlower test started without modem IPv6 configured")
+    
+    test_id = str(uuid.uuid4())
+    
+    if async_mode:
+        thread = threading.Thread(target=_run_byteblower_test, args=(test_id, bbp_file, scenarios, test_group_name, iterations, rtt_configs))
+        thread.daemon = True
+        thread.start()
+        
+        running_tests[test_id] = {
+            "status": "running",
+            "type": "byteblower",
+            "started": datetime.now().isoformat(),
+            "output_dir": None
+        }
+        
+        return jsonify({"test_id": test_id, "status": "running", "message": "Test started in background"}), 202
+    else:
+        result = _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iterations, rtt_configs)
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+
+def _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iterations, rtt_configs):
+    try:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Starting ByteBlower test: {test_id}")
+        logger.info(f"Test group: {test_group_name}")
+        logger.info(f"Scenarios: {scenarios}")
+        logger.info(f"Iterations: {iterations}")
+        logger.info(f"Modem IPv6: {modem_ipv6}")
+        logger.info(f"{'='*60}")
+        
+        scenario_list = [s.strip() for s in scenarios.split(',')]
+        rtt_list = [r.strip() for r in rtt_configs.split(',')] if rtt_configs else ['']
+        
+        rtt_suffix = ""
+        if rtt_list[0]:
+            rtt_match = re.search(r'(\d+)ms', rtt_list[0])
+            if rtt_match:
+                rtt_suffix = f"_RTT_{rtt_match.group(1)}ms"
+        
+        parent_output_dir = f"Results/{test_group_name}_ByteBlower{rtt_suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        os.makedirs(parent_output_dir, exist_ok=True)
+        logger.info(f"Output directory: {parent_output_dir}")
+        
+        # Register result with ID
+        result_id = str(uuid.uuid4())
+        result_registry[result_id] = parent_output_dir
+        
+        if test_id in running_tests:
+            running_tests[test_id]["output_dir"] = parent_output_dir
+            running_tests[test_id]["result_id"] = result_id
+        
+        all_success = True
+        
+        for scenario in scenario_list:
+            for rtt_file in rtt_list:
+                rtt_suffix_current = ""
+                if rtt_file:
+                    rtt_match = re.search(r'(\d+)ms', rtt_file)
+                    if rtt_match:
+                        rtt_suffix_current = f"_RTT_{rtt_match.group(1)}ms"
+                
+                logger.info(f"\nRunning scenario: {scenario}{rtt_suffix_current}")
+                bb = ByteBlowerLogic(bbp_file, scenario, scenario, test_group_name, rtt_suffix_current, "html pdf csv xls xlsx json docx")
+                snmp_dir = os.path.join(parent_output_dir, scenario + rtt_suffix_current)
+                os.makedirs(snmp_dir, exist_ok=True)
+                logger.info(f"SNMP directory: {snmp_dir}")
+                
+                for i in range(iterations):
+                    logger.info(f"Iteration {i+1}/{iterations}")
+                    if modem_ipv6:
+                        logger.info(f"Collecting SNMP before - iteration {i+1}")
+                        run_snmp_collection(modem_ipv6, f"ByteBlower_{scenario}_iteration_{i+1}", "before", snmp_dir)
+                    else:
+                        logger.warning("Modem IPv6 not set - skipping SNMP collection")
+                    
+                    if not bb.run_scenario(i, iterations, parent_output_dir):
+                        all_success = False
+                    
+                    if modem_ipv6:
+                        logger.info(f"Collecting SNMP after - iteration {i+1}")
+                        run_snmp_collection(modem_ipv6, f"ByteBlower_{scenario}_iteration_{i+1}", "after", snmp_dir)
+        
+        logger.info(f"\nTest completed: {test_id}")
+        logger.info(f"Success: {all_success}")
+        logger.info(f"Output: {parent_output_dir}")
+        logger.info(f"Result ID: {result_id}")
+        
+        result = {"success": all_success, "result_id": result_id, "output_dir": parent_output_dir, "scenarios": len(scenario_list), "rtt_configs": len(rtt_list), "iterations": iterations}
+        
+        if test_id in running_tests:
+            running_tests[test_id]["status"] = "completed" if all_success else "failed"
+            running_tests[test_id]["completed"] = datetime.now().isoformat()
+            running_tests[test_id]["result"] = result
+        
+        return result
+    except Exception as e:
+        logger.error(f"Test failed: {test_id} - {str(e)}")
+        if test_id in running_tests:
+            running_tests[test_id]["status"] = "error"
+            running_tests[test_id]["error"] = str(e)
+        return {"success": False, "error": str(e)}
+
+@app.route('/api/packetstorm/start', methods=['POST'])
+def start_packetstorm():
+    data = request.json
+    if not data:
+        return jsonify({"error": "Request body is required"}), 400
+    
+    rtt_config = data.get('rtt_config')
+    if not rtt_config:
+        return jsonify({"error": "rtt_config is required"}), 400
+    
+    ps = PacketStormLogic(rtt_config)
+    success = ps.start_config()
+    
+    if success:
+        return jsonify({"success": True, "config": rtt_config}), 200
+    else:
+        return jsonify({"success": False, "error": "Failed to start PacketStorm config"}), 500
+
+@app.route('/api/packetstorm/stop', methods=['POST'])
+def stop_packetstorm():
+    data = request.json
+    rtt_config = data.get('rtt_config', 'default.json') if data else 'default.json'
+    
+    ps = PacketStormLogic(rtt_config)
+    success = ps.stop_config()
+    
+    if success:
+        return jsonify({"success": True}), 200
+    else:
+        return jsonify({"success": False, "error": "Failed to stop PacketStorm config"}), 500
+
+@app.route('/api/iperf3/run', methods=['POST'])
+def run_iperf3():
+    data = request.json
+    if not data:
+        return jsonify({"error": "Request body is required"}), 400
+    
+    client_ip = data.get('client_ip')
+    scenarios = data.get('scenario')
+    test_group_name = data.get('test_group_name')
+    iterations = data.get('iterations', 1)
+    output_format = data.get('output_format', 'json')
+    platform = data.get('platform', 'linux')
+    rtt_configs = data.get('rtt_config', '')
+    
+    if not all([client_ip, scenarios, test_group_name]):
+        return jsonify({"error": "client_ip, scenario, and test_group_name are required"}), 400
+    
+    # Parse comma-separated scenarios and RTT configs
+    scenario_list = [s.strip() for s in scenarios.split(',')]
+    rtt_list = [r.strip() for r in rtt_configs.split(',')] if rtt_configs else ['']
+    
+    # Extract RTT suffix from first RTT file
+    rtt_suffix = ""
+    if rtt_list[0]:
+        rtt_match = re.search(r'(\d+)ms', rtt_list[0])
+        if rtt_match:
+            rtt_suffix = f"_RTT_{rtt_match.group(1)}ms"
+    
+    platform_override = 'macos' if platform == 'macos' else None
+    platform_suffix = "_macOS" if platform == 'macos' else "_Linux"
+    
+    # Create parent output directory
+    parent_output_dir = f"Results/{test_group_name}_iPerf3{platform_suffix}{rtt_suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    os.makedirs(parent_output_dir, exist_ok=True)
+    
+    all_success = True
+    
+    # Run all scenario/RTT combinations
+    for scenario in scenario_list:
+        for rtt_file in rtt_list:
+            # Extract RTT suffix for this combination
+            rtt_suffix_current = ""
+            if rtt_file:
+                rtt_match = re.search(r'(\d+)ms', rtt_file)
+                if rtt_match:
+                    rtt_suffix_current = f"_RTT_{rtt_match.group(1)}ms"
+            
+            iperf3 = IPerf3Logic(client_ip, scenario, test_group_name, rtt_suffix_current, output_format, platform_override, parent_output_dir)
+            
+            if not iperf3.setup_ssh_keys():
+                return jsonify({"error": "SSH key setup failed"}), 500
+            
+            if not iperf3.setup_iperf3_servers():
+                return jsonify({"error": "iPerf3 server setup failed"}), 500
+            
+            # Create SNMP subdirectory
+            snmp_dir = os.path.join(parent_output_dir, scenario + platform_suffix + rtt_suffix_current)
+            os.makedirs(snmp_dir, exist_ok=True)
+            
+            for i in range(iterations):
+                if modem_ipv6:
+                    run_snmp_collection(modem_ipv6, f"iPerf3{platform_suffix}_{scenario}_iteration_{i+1}", "before", snmp_dir)
+                if not iperf3.run_scenario(i, iterations):
+                    all_success = False
+                if modem_ipv6:
+                    run_snmp_collection(modem_ipv6, f"iPerf3{platform_suffix}_{scenario}_iteration_{i+1}", "after", snmp_dir)
+            
+            iperf3.stop_iperf3_servers()
+    
+    return jsonify({"success": all_success, "output_dir": parent_output_dir, "scenarios": len(scenario_list), "rtt_configs": len(rtt_list), "iterations": iterations})
+
+@app.route('/api/speedtest/run', methods=['POST'])
+def run_speedtest():
+    data = request.json
+    clients = data.get('clients', ['linux', 'macos', 'nvidia'])
+    test_group_name = data.get('test_group_name', 'Speedtest')
+    iterations = data.get('iterations', 1)
+    
+    st = SpeedTestLogic(clients, test_group_name)
+    success = st.run_iterations(iterations)
+    
+    return jsonify({"success": success, "clients": clients, "iterations": iterations})
+
+@app.route('/api/snmp/collect', methods=['POST'])
+def collect_snmp():
+    data = request.json
+    target_ip = data.get('target_ip') or modem_ipv6
+    test_name = data.get('test_name')
+    phase = data.get('phase', 'before')
+    output_dir = data.get('output_dir', 'Results')
+    
+    if not target_ip or not test_name:
+        return jsonify({"error": "target_ip and test_name are required"}), 400
+    
+    try:
+        collect_snmp_data(target_ip, test_name, phase, output_dir)
+        return jsonify({"success": True, "phase": phase})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/bb_flows', methods=['GET'])
+def list_bb_flows():
+    bb_flows_dir = 'bb_flows'
+    if not os.path.exists(bb_flows_dir):
+        return jsonify({"bb_flows": []})
+    
+    flows = []
+    for item in os.listdir(bb_flows_dir):
+        if item.endswith('.bbp'):
+            item_path = os.path.join(bb_flows_dir, item)
+            flows.append({"name": item, "path": item_path, "size": os.path.getsize(item_path)})
+    
+    return jsonify({"bb_flows": sorted(flows, key=lambda x: x['name'])})
+
+@app.route('/api/test/status/<test_id>', methods=['GET'])
+def get_test_status(test_id):
+    if test_id not in running_tests:
+        return jsonify({"error": "Test not found"}), 404
+    
+    return jsonify(running_tests[test_id])
+
+@app.route('/api/test/list', methods=['GET'])
+def list_tests():
+    return jsonify({"tests": running_tests})
+
+@app.route('/api/results', methods=['GET'])
+def list_results():
+    results_dir = 'Results'
+    if not os.path.exists(results_dir):
+        return jsonify({"results": []}), 200
+    
+    results = []
+    for item in os.listdir(results_dir):
+        item_path = os.path.join(results_dir, item)
+        if os.path.isdir(item_path):
+            # Find or create result_id for this folder
+            result_id = None
+            for rid, path in result_registry.items():
+                if path == item_path:
+                    result_id = rid
+                    break
+            
+            if not result_id:
+                result_id = str(uuid.uuid4())
+                result_registry[result_id] = item_path
+            
+            results.append({
+                "id": result_id,
+                "name": item,
+                "path": item_path,
+                "created": datetime.fromtimestamp(os.path.getctime(item_path)).isoformat()
+            })
+    
+    return jsonify({"results": sorted(results, key=lambda x: x['created'], reverse=True)}), 200
+
+@app.route('/api/results/<result_id>', methods=['GET'])
+def get_result_files(result_id):
+    if result_id not in result_registry:
+        return jsonify({"error": "Result not found"}), 404
+    
+    result_path = result_registry[result_id]
+    if not os.path.exists(result_path):
+        return jsonify({"error": "Result folder not found"}), 404
+    
+    files = []
+    for root, dirs, filenames in os.walk(result_path):
+        for filename in filenames:
+            file_path = os.path.join(root, filename)
+            rel_path = os.path.relpath(file_path, result_path)
+            files.append({"name": filename, "path": rel_path, "size": os.path.getsize(file_path)})
+    
+    return jsonify({"id": result_id, "name": os.path.basename(result_path), "files": files}), 200
+
+@app.route('/api/results/<result_id>/snmp', methods=['GET'])
+def get_snmp_analysis(result_id):
+    if result_id not in result_registry:
+        return jsonify({"error": "Result not found"}), 404
+    
+    result_path = result_registry[result_id]
+    if not os.path.exists(result_path):
+        return jsonify({"error": "Result folder not found"}), 404
+    
+    # Find all SNMP files
+    snmp_files = []
+    for root, dirs, filenames in os.walk(result_path):
+        for filename in filenames:
+            if '_SNMP_' in filename and filename.endswith('.txt'):
+                snmp_files.append(os.path.join(root, filename))
+    
+    if not snmp_files:
+        return jsonify({"error": "No SNMP files found"}), 404
+    
+    # Parse SNMP files and group by iteration
+    iterations = {}
+    for snmp_file in snmp_files:
+        filename = os.path.basename(snmp_file)
+        
+        # Extract iteration and phase
+        if '_before_' in filename:
+            phase = 'before'
+        elif '_after_' in filename:
+            phase = 'after'
+        else:
+            continue
+        
+        # Extract iteration number
+        import re
+        iter_match = re.search(r'iteration_(\d+)', filename)
+        if iter_match:
+            iter_num = int(iter_match.group(1))
+        else:
+            iter_num = 1
+        
+        if iter_num not in iterations:
+            iterations[iter_num] = {}
+        
+        # Parse SNMP file
+        with open(snmp_file, 'r') as f:
+            content = f.read()
+        
+        # Extract OID values with names
+        oid_pattern = r'SNMPv2-SMI::(.+?) = (.+?): (.+)'
+        matches = re.findall(oid_pattern, content)
+        
+        # OID to metric name mapping
+        oid_names = {
+            'mib-2.2.2.1.10': 'ifInOctets',
+            'mib-2.2.2.1.16': 'ifOutOctets',
+            'mib-2.31.1.1.1.6': 'ifHCInOctets',
+            'mib-2.31.1.1.1.10': 'ifHCOutOctets',
+            'mib-2.2.2.1.11': 'ifInUcastPkts',
+            'mib-2.2.2.1.17': 'ifOutUcastPkts',
+            'mib-2.2.2.1.12': 'ifInNUcastPkts',
+            'mib-2.2.2.1.18': 'ifOutNUcastPkts',
+            'mib-2.2.2.1.13': 'ifInDiscards',
+            'mib-2.2.2.1.19': 'ifOutDiscards',
+            'mib-2.2.2.1.14': 'ifInErrors',
+            'mib-2.2.2.1.20': 'ifOutErrors'
+        }
+        
+        oid_data = {}
+        for oid, data_type, value in matches:
+            # Extract numeric value
+            numeric_match = re.search(r'(\d+)', value)
+            if numeric_match:
+                # Get base OID (without interface index)
+                base_oid = '.'.join(oid.split('.')[:-1])
+                metric_name = oid_names.get(base_oid, oid)
+                oid_data[metric_name] = int(numeric_match.group(1))
+        
+        iterations[iter_num][phase] = {
+            'file': filename,
+            'oids': oid_data
+        }
+    
+    # Calculate deltas
+    analysis = []
+    for iter_num in sorted(iterations.keys()):
+        iter_data = iterations[iter_num]
+        
+        if 'before' not in iter_data or 'after' not in iter_data:
+            continue
+        
+        before_oids = iter_data['before']['oids']
+        after_oids = iter_data['after']['oids']
+        
+        deltas = {}
+        for metric_name in before_oids:
+            if metric_name in after_oids:
+                delta = after_oids[metric_name] - before_oids[metric_name]
+                deltas[metric_name] = {
+                    'before': before_oids[metric_name],
+                    'after': after_oids[metric_name],
+                    'delta': delta
+                }
+        
+        analysis.append({
+            'iteration': iter_num,
+            'before_file': iter_data['before']['file'],
+            'after_file': iter_data['after']['file'],
+            'metrics': deltas
+        })
+    
+    return jsonify({
+        "result_id": result_id,
+        "iterations": analysis
+    }), 200
+
+@app.route('/api/results/<result_id>/download', methods=['GET'])
+def download_result_folder(result_id):
+    if result_id not in result_registry:
+        return jsonify({"error": "Result not found"}), 404
+    
+    result_path = result_registry[result_id]
+    if not os.path.exists(result_path):
+        return jsonify({"error": "Result folder not found"}), 404
+    
+    temp_dir = tempfile.mkdtemp()
+    result_name = os.path.basename(result_path)
+    zip_path = os.path.join(temp_dir, result_name)
+    shutil.make_archive(zip_path, 'zip', result_path)
+    
+    return send_file(f"{zip_path}.zip", as_attachment=True, download_name=f"{result_name}.zip", mimetype='application/zip')
+
+@app.route('/api/results/<result_id>/download/<path:file_path>', methods=['GET'])
+def download_result_file(result_id, file_path):
+    if result_id not in result_registry:
+        return jsonify({"error": "Result not found"}), 404
+    
+    result_path = result_registry[result_id]
+    full_path = os.path.join(result_path, file_path)
+    
+    if not os.path.exists(full_path):
+        return jsonify({"error": "File not found"}), 404
+    
+    return send_file(full_path, as_attachment=True)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
