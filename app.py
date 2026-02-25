@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 import os
 import glob
@@ -23,6 +23,10 @@ logger = Logger("FlaskAPI")
 modem_ipv6 = None
 running_tests = {}  # Store test status
 result_registry = {}  # Map result_id to folder path
+
+@app.route('/', methods=['GET'])
+def serve_ui():
+    return send_from_directory('static', 'index.html')
 
 @app.route('/health', methods=['GET'])
 def health():

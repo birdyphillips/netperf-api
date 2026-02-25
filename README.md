@@ -61,6 +61,13 @@ tail -f api.log
 
 Server runs on `http://0.0.0.0:5000`
 
+### Web UI
+Access the interactive API documentation at:
+- **Local**: http://localhost:5000/
+- **Remote**: http://24.28.218.10:5000/
+
+Swagger-like interface with all 16 endpoints, try-it-out functionality, and live response display.
+
 ## 📡 API Endpoints
 
 ### Health & Configuration

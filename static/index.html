@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetPerf API - Interactive Documentation</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fafafa; }
+        .header { background: #1b1b1b; color: white; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header h1 { font-size: 24px; margin-bottom: 5px; }
+        .header p { color: #aaa; font-size: 14px; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .section { background: white; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .section-header { background: #f7f7f7; padding: 15px 20px; border-bottom: 1px solid #e8e8e8; font-weight: 600; font-size: 16px; }
+        .endpoint { border-bottom: 1px solid #e8e8e8; }
+        .endpoint:last-child { border-bottom: none; }
+        .endpoint-summary { padding: 15px 20px; cursor: pointer; display: flex; align-items: center; gap: 15px; transition: background 0.2s; }
+        .endpoint-summary:hover { background: #f9f9f9; }
+        .method { padding: 5px 10px; border-radius: 4px; font-weight: 600; font-size: 12px; text-transform: uppercase; min-width: 60px; text-align: center; }
+        .method.get { background: #61affe; color: white; }
+        .method.post { background: #49cc90; color: white; }
+        .path { flex: 1; font-family: monospace; color: #3b4151; }
+        .description { color: #666; font-size: 14px; }
+        .endpoint-details { display: none; padding: 20px; background: #fafafa; border-top: 1px solid #e8e8e8; }
+        .endpoint-details.active { display: block; }
+        .params { margin-bottom: 20px; }
+        .params h4 { margin-bottom: 10px; font-size: 14px; }
+        .param { background: white; padding: 10px; margin-bottom: 8px; border-radius: 4px; border: 1px solid #e8e8e8; }
+        .param-name { font-weight: 600; color: #3b4151; margin-bottom: 5px; }
+        .param-type { color: #666; font-size: 12px; }
+        .try-it { background: white; padding: 15px; border-radius: 4px; border: 1px solid #e8e8e8; }
+        .try-it h4 { margin-bottom: 10px; font-size: 14px; }
+        textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 13px; min-height: 150px; }
+        input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 13px; margin-bottom: 10px; }
+        button { background: #4990e2; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: 600; }
+        button:hover { background: #357abd; }
+        .response { margin-top: 15px; }
+        .response pre { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 13px; }
+        .config-section { background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        .config-section h3 { color: #856404; margin-bottom: 10px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>NetPerf API v2.0</h1>
+            <p>Interactive API Documentation - Network Performance Testing | <a href="https://github.com/birdyphillips/netperf-api" style="color: #61affe; text-decoration: none;">📖 README</a> | <a href="https://github.com/birdyphillips/netperf-api#-usage-examples" style="color: #49cc90; text-decoration: none;">💡 Usage Examples</a></p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="config-section">
+            <h3>⚙️ Configuration</h3>
+            <label>Base URL:</label>
+            <input type="text" id="baseUrl" value="http://24.28.218.10:5000" placeholder="http://localhost:5000">
+            <label>Modem IPv6 (for SNMP):</label>
+            <input type="text" id="modemIpv6" value="2605:1c00:50f2:203:a49d:6fa2:3d34:7329" placeholder="2605:1c00:50f2:203:a49d:6fa2:3d34:7329">
+        </div>
+
+        <!-- Health & Configuration -->
+        <div class="section">
+            <div class="section-header">Health & Configuration</div>
+            
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method get">GET</span>
+                    <span class="path">/health</span>
+                    <span class="description">Health check</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <h4>Try it out</h4>
+                        <button onclick="executeRequest('GET', '/health', null, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/config/modem</span>
+                    <span class="description">Set modem IPv6 for SNMP</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="params">
+                        <h4>Request Body</h4>
+                        <div class="param">
+                            <div class="param-name">ipv6</div>
+                            <div class="param-type">string (required) - Modem IPv6 address</div>
+                        </div>
+                    </div>
+                    <div class="try-it">
+                        <h4>Request Body</h4>
+                        <textarea class="request-body">{"ipv6": "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"}</textarea>
+                        <button onclick="executeRequest('POST', '/api/config/modem', this.previousElementSibling, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Execution -->
+        <div class="section">
+            <div class="section-header">Test Execution</div>
+            
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/byteblower/run</span>
+                    <span class="description">Run ByteBlower test</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="params">
+                        <h4>Request Body</h4>
+                        <div class="param">
+                            <div class="param-name">bbp_file, scenario, test_group_name</div>
+                            <div class="param-type">required | iterations, rtt_config, async - optional</div>
+                        </div>
+                    </div>
+                    <div class="try-it">
+                        <h4>Request Body</h4>
+                        <textarea class="request-body">{
+  "bbp_file": "Port_20_example.bbp",
+  "scenario": "US_Classic_Only",
+  "test_group_name": "TEST_SCN_RTT_0",
+  "iterations": 1,
+  "rtt_config": "",
+  "async": false
+}</textarea>
+                        <button onclick="executeRequest('POST', '/api/byteblower/run', this.previousElementSibling, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/iperf3/run</span>
+                    <span class="description">Run iPerf3 test</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="params">
+                        <h4>Request Body</h4>
+                        <div class="param">
+                            <div class="param-name">client_ip, scenario, test_group_name</div>
+                            <div class="param-type">required | platform: linux/macos, iterations, rtt_config - optional</div>
+                        </div>
+                    </div>
+                    <div class="try-it">
+                        <h4>Request Body</h4>
+                        <textarea class="request-body">{
+  "client_ip": "96.37.176.19",
+  "scenario": "US_Classic_Only",
+  "test_group_name": "TEST_SCN_RTT_0",
+  "iterations": 1,
+  "platform": "linux",
+  "rtt_config": ""
+}</textarea>
+                        <button onclick="executeRequest('POST', '/api/iperf3/run', this.previousElementSibling, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/speedtest/run</span>
+                    <span class="description">Run SpeedTest</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <h4>Request Body</h4>
+                        <textarea class="request-body">{
+  "clients": ["linux", "macos", "nvidia"],
+  "test_group_name": "Speedtest",
+  "iterations": 1
+}</textarea>
+                        <button onclick="executeRequest('POST', '/api/speedtest/run', this.previousElementSibling, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/packetstorm/start</span>
+                    <span class="description">Start PacketStorm RTT</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <h4>Request Body</h4>
+                        <textarea class="request-body">{"rtt_config": "vcmts10ms.json"}</textarea>
+                        <button onclick="executeRequest('POST', '/api/packetstorm/start', this.previousElementSibling, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/packetstorm/stop</span>
+                    <span class="description">Stop PacketStorm RTT</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <h4>Request Body</h4>
+                        <textarea class="request-body">{"rtt_config": "vcmts10ms.json"}</textarea>
+                        <button onclick="executeRequest('POST', '/api/packetstorm/stop', this.previousElementSibling, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div class="section">
+            <div class="section-header">Results Management</div>
+            
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/results</span>
+                    <span class="description">List all results</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <button onclick="executeRequest('GET', '/api/results', null, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/results/{result_id}</span>
+                    <span class="description">Get result files</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <h4>Parameters</h4>
+                        <input type="text" class="param-input" placeholder="result_id (UUID)">
+                        <button onclick="executeRequest('GET', '/api/results/' + this.previousElementSibling.value, null, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/results/{result_id}/snmp</span>
+                    <span class="description">Get SNMP analysis</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <h4>Parameters</h4>
+                        <input type="text" class="param-input" placeholder="result_id (UUID)">
+                        <button onclick="executeRequest('GET', '/api/results/' + this.previousElementSibling.value + '/snmp', null, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Management -->
+        <div class="section">
+            <div class="section-header">Test Management</div>
+            
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/test/list</span>
+                    <span class="description">List all tests</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <button onclick="executeRequest('GET', '/api/test/list', null, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/test/status/{test_id}</span>
+                    <span class="description">Get test status</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <h4>Parameters</h4>
+                        <input type="text" class="param-input" placeholder="test_id (UUID)">
+                        <button onclick="executeRequest('GET', '/api/test/status/' + this.previousElementSibling.value, null, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resources -->
+        <div class="section">
+            <div class="section-header">Resources</div>
+            
+            <div class="endpoint">
+                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/bb_flows</span>
+                    <span class="description">List ByteBlower flows</span>
+                </div>
+                <div class="endpoint-details">
+                    <div class="try-it">
+                        <button onclick="executeRequest('GET', '/api/bb_flows', null, this)">Execute</button>
+                        <div class="response"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleEndpoint(element) {
+            const details = element.nextElementSibling;
+            details.classList.toggle('active');
+        }
+
+        async function executeRequest(method, path, bodyElement, buttonElement) {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const url = baseUrl + path;
+            const responseDiv = buttonElement.nextElementSibling;
+            
+            const options = {
+                method: method,
+                headers: {'Content-Type': 'application/json'}
+            };
+
+            if (bodyElement && bodyElement.value) {
+                options.body = bodyElement.value;
+            }
+
+            responseDiv.innerHTML = '<pre>Loading...</pre>';
+
+            try {
+                const response = await fetch(url, options);
+                const data = await response.json();
+                responseDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                responseDiv.innerHTML = `<pre style="color: #f44336;">Error: ${error.message}</pre>`;
+            }
+        }
+    </script>
+</body>
+</html>
