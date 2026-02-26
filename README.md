@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-netperf--api-black.svg)](https://github.com/birdyphillips/netperf-api)
 
-REST API for automated network performance testing with ByteBlower, iPerf3, PacketStorm, and SpeedTest. Provides HTTP endpoints for running comprehensive network tests with SNMP monitoring, RTT configuration, and multi-scenario support.
+REST API for automated DOCSIS 3.1 and 4.0 network performance testing with ByteBlower, iPerf3, PacketStorm, and SpeedTest. Provides HTTP endpoints for running comprehensive network tests with SNMP monitoring, RTT configuration, and multi-scenario support.
 
 ## 🚀 Features
 
