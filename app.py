@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
+from flasgger import Swagger
 import os
 import glob
 from datetime import datetime
@@ -18,6 +19,46 @@ import uuid
 
 app = Flask(__name__)
 CORS(app)
+
+# Swagger configuration
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": 'apispec',
+            "route": '/apispec.json',
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda tag: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/swagger/"
+}
+
+swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "NetPerf API",
+        "description": "REST API for Network Performance Testing - ByteBlower, iPerf3, PacketStorm, SpeedTest",
+        "version": "2.0.0",
+        "contact": {
+            "name": "birdyphillips",
+            "url": "https://github.com/birdyphillips/netperf-api"
+        }
+    },
+    "host": "24.28.218.10:5000",
+    "basePath": "/",
+    "schemes": ["http"],
+    "tags": [
+        {"name": "Health", "description": "Health check and configuration"},
+        {"name": "Tests", "description": "Test execution endpoints"},
+        {"name": "Results", "description": "Results management"},
+        {"name": "Management", "description": "Test status and monitoring"}
+    ]
+}
+
+Swagger(app, config=swagger_config, template=swagger_template)
 logger = Logger("FlaskAPI")
 
 modem_ipv6 = None
@@ -30,10 +71,51 @@ def serve_ui():
 
 @app.route('/health', methods=['GET'])
 def health():
+    """
+    Health Check
+    ---
+    tags:
+      - Health
+    responses:
+      200:
+        description: API is healthy
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: healthy
+            timestamp:
+              type: string
+              example: "2025-02-25T10:30:00"
+    """
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
 @app.route('/api/config/modem', methods=['POST'])
 def set_modem():
+    """
+    Set Modem IPv6 for SNMP Collection
+    ---
+    tags:
+      - Health
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - ipv6
+          properties:
+            ipv6:
+              type: string
+              example: "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"
+    responses:
+      200:
+        description: Modem IPv6 configured successfully
+      400:
+        description: Invalid request
+    """
     global modem_ipv6
     data = request.json
     if not data:
@@ -57,6 +139,50 @@ def run_snmp_collection(target_ip, test_name, phase, output_dir):
 
 @app.route('/api/byteblower/run', methods=['POST'])
 def run_byteblower():
+    """
+    Run ByteBlower Test
+    ---
+    tags:
+      - Tests
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - bbp_file
+            - scenario
+            - test_group_name
+          properties:
+            bbp_file:
+              type: string
+              example: "Port_20_example.bbp"
+            scenario:
+              type: string
+              example: "US_Classic_Only"
+            test_group_name:
+              type: string
+              example: "TEST_SCN_RTT_0"
+            iterations:
+              type: integer
+              default: 1
+            rtt_config:
+              type: string
+              example: "vcmts10ms.json"
+            async:
+              type: boolean
+              default: false
+    responses:
+      200:
+        description: Test completed successfully
+      202:
+        description: Test started in background
+      400:
+        description: Invalid request
+      500:
+        description: Test failed
+    """
     data = request.json
     if not data:
         return jsonify({"error": "Request body is required"}), 400
@@ -336,6 +462,31 @@ def list_tests():
 
 @app.route('/api/results', methods=['GET'])
 def list_results():
+    """
+    List All Results
+    ---
+    tags:
+      - Results
+    responses:
+      200:
+        description: List of all test results
+        schema:
+          type: object
+          properties:
+            results:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  path:
+                    type: string
+                  created:
+                    type: string
+    """
     results_dir = 'Results'
     if not os.path.exists(results_dir):
         return jsonify({"results": []}), 200

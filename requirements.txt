@@ -16,3 +16,4 @@ flask-cors>=4.0.0
 
 # Optional: For enhanced logging
 # colorlog>=6.7.0
+flasgger
