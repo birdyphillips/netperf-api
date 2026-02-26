@@ -40,7 +40,19 @@ swagger_template = {
     "swagger": "2.0",
     "info": {
         "title": "NetPerf API",
-        "description": "REST API for Network Performance Testing - ByteBlower, iPerf3, PacketStorm, SpeedTest",
+        "description": """REST API for Network Performance Testing - ByteBlower, iPerf3, PacketStorm, SpeedTest
+
+## Documentation
+
+- **GitHub**: [netperf-api](https://github.com/birdyphillips/netperf-api)
+- **Full README**: [Documentation](https://github.com/birdyphillips/netperf-api#readme)
+- **Usage Examples**: [Examples](https://github.com/birdyphillips/netperf-api#-usage-examples)
+- **Postman Collection**: Available in repository
+
+## Support
+
+For issues or questions, visit the [GitHub repository](https://github.com/birdyphillips/netperf-api).
+""",
         "version": "2.0.0",
         "contact": {
             "name": "birdyphillips",
