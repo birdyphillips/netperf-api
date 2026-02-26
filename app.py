@@ -302,6 +302,31 @@ def _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iteratio
 
 @app.route('/api/packetstorm/start', methods=['POST'])
 def start_packetstorm():
+    """
+    Start PacketStorm RTT Configuration
+    ---
+    tags:
+      - Tests
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - rtt_config
+          properties:
+            rtt_config:
+              type: string
+              example: "vcmts10ms.json"
+    responses:
+      200:
+        description: PacketStorm started successfully
+      400:
+        description: Invalid request
+      500:
+        description: Failed to start
+    """
     data = request.json
     if not data:
         return jsonify({"error": "Request body is required"}), 400
@@ -320,6 +345,26 @@ def start_packetstorm():
 
 @app.route('/api/packetstorm/stop', methods=['POST'])
 def stop_packetstorm():
+    """
+    Stop PacketStorm RTT Configuration
+    ---
+    tags:
+      - Tests
+    parameters:
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            rtt_config:
+              type: string
+              example: "vcmts10ms.json"
+    responses:
+      200:
+        description: PacketStorm stopped successfully
+      500:
+        description: Failed to stop
+    """
     data = request.json
     rtt_config = data.get('rtt_config', 'default.json') if data else 'default.json'
     
@@ -333,6 +378,53 @@ def stop_packetstorm():
 
 @app.route('/api/iperf3/run', methods=['POST'])
 def run_iperf3():
+    """
+    Run iPerf3 Test
+    ---
+    tags:
+      - Tests
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - client_ip
+            - scenario
+            - test_group_name
+          properties:
+            client_ip:
+              type: string
+              example: "96.37.176.19"
+            scenario:
+              type: string
+              example: "US_Classic_Only"
+            test_group_name:
+              type: string
+              example: "TEST_SCN_RTT_0"
+            iterations:
+              type: integer
+              default: 1
+            platform:
+              type: string
+              enum: [linux, macos]
+              default: linux
+            output_format:
+              type: string
+              enum: [json, txt]
+              default: json
+            rtt_config:
+              type: string
+              example: "vcmts10ms.json"
+    responses:
+      200:
+        description: Test completed successfully
+      400:
+        description: Invalid request
+      500:
+        description: Test failed
+    """
     data = request.json
     if not data:
         return jsonify({"error": "Request body is required"}), 400
@@ -404,6 +496,32 @@ def run_iperf3():
 
 @app.route('/api/speedtest/run', methods=['POST'])
 def run_speedtest():
+    """
+    Run SpeedTest
+    ---
+    tags:
+      - Tests
+    parameters:
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            clients:
+              type: array
+              items:
+                type: string
+              example: ["linux", "macos", "nvidia"]
+            test_group_name:
+              type: string
+              example: "Speedtest"
+            iterations:
+              type: integer
+              default: 1
+    responses:
+      200:
+        description: Test completed successfully
+    """
     data = request.json
     clients = data.get('clients', ['linux', 'macos', 'nvidia'])
     test_group_name = data.get('test_group_name', 'Speedtest')
@@ -416,6 +534,41 @@ def run_speedtest():
 
 @app.route('/api/snmp/collect', methods=['POST'])
 def collect_snmp():
+    """
+    Collect SNMP Data
+    ---
+    tags:
+      - Tests
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - test_name
+          properties:
+            target_ip:
+              type: string
+              example: "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"
+            test_name:
+              type: string
+              example: "TEST_SCN_RTT_0"
+            phase:
+              type: string
+              enum: [before, after]
+              default: before
+            output_dir:
+              type: string
+              default: "Results"
+    responses:
+      200:
+        description: SNMP data collected successfully
+      400:
+        description: Invalid request
+      500:
+        description: Collection failed
+    """
     data = request.json
     target_ip = data.get('target_ip') or modem_ipv6
     test_name = data.get('test_name')
@@ -433,6 +586,29 @@ def collect_snmp():
 
 @app.route('/api/bb_flows', methods=['GET'])
 def list_bb_flows():
+    """
+    List ByteBlower Flows
+    ---
+    tags:
+      - Management
+    responses:
+      200:
+        description: List of available ByteBlower flow files
+        schema:
+          type: object
+          properties:
+            bb_flows:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  path:
+                    type: string
+                  size:
+                    type: integer
+    """
     bb_flows_dir = 'bb_flows'
     if not os.path.exists(bb_flows_dir):
         return jsonify({"bb_flows": []})
@@ -447,6 +623,23 @@ def list_bb_flows():
 
 @app.route('/api/test/status/<test_id>', methods=['GET'])
 def get_test_status(test_id):
+    """
+    Get Test Status
+    ---
+    tags:
+      - Management
+    parameters:
+      - in: path
+        name: test_id
+        required: true
+        type: string
+        description: Test UUID
+    responses:
+      200:
+        description: Test status retrieved
+      404:
+        description: Test not found
+    """
     if test_id not in running_tests:
         return jsonify({"error": "Test not found"}), 404
     
@@ -454,6 +647,20 @@ def get_test_status(test_id):
 
 @app.route('/api/test/list', methods=['GET'])
 def list_tests():
+    """
+    List All Tests
+    ---
+    tags:
+      - Management
+    responses:
+      200:
+        description: List of all tests
+        schema:
+          type: object
+          properties:
+            tests:
+              type: object
+    """
     return jsonify({"tests": running_tests})
 
 @app.route('/api/results', methods=['GET'])
@@ -513,6 +720,23 @@ def list_results():
 
 @app.route('/api/results/<result_id>', methods=['GET'])
 def get_result_files(result_id):
+    """
+    Get Result Files
+    ---
+    tags:
+      - Results
+    parameters:
+      - in: path
+        name: result_id
+        required: true
+        type: string
+        description: Result UUID
+    responses:
+      200:
+        description: List of files in result
+      404:
+        description: Result not found
+    """
     if result_id not in result_registry:
         return jsonify({"error": "Result not found"}), 404
     
@@ -531,6 +755,23 @@ def get_result_files(result_id):
 
 @app.route('/api/results/<result_id>/snmp', methods=['GET'])
 def get_snmp_analysis(result_id):
+    """
+    Get SNMP Analysis
+    ---
+    tags:
+      - Results
+    parameters:
+      - in: path
+        name: result_id
+        required: true
+        type: string
+        description: Result UUID
+    responses:
+      200:
+        description: SNMP analysis with deltas
+      404:
+        description: Result or SNMP files not found
+    """
     if result_id not in result_registry:
         return jsonify({"error": "Result not found"}), 404
     
@@ -646,6 +887,23 @@ def get_snmp_analysis(result_id):
 
 @app.route('/api/results/<result_id>/download', methods=['GET'])
 def download_result_folder(result_id):
+    """
+    Download Result Folder as ZIP
+    ---
+    tags:
+      - Results
+    parameters:
+      - in: path
+        name: result_id
+        required: true
+        type: string
+        description: Result UUID
+    responses:
+      200:
+        description: ZIP file download
+      404:
+        description: Result not found
+    """
     if result_id not in result_registry:
         return jsonify({"error": "Result not found"}), 404
     
@@ -662,6 +920,28 @@ def download_result_folder(result_id):
 
 @app.route('/api/results/<result_id>/download/<path:file_path>', methods=['GET'])
 def download_result_file(result_id, file_path):
+    """
+    Download Individual Result File
+    ---
+    tags:
+      - Results
+    parameters:
+      - in: path
+        name: result_id
+        required: true
+        type: string
+        description: Result UUID
+      - in: path
+        name: file_path
+        required: true
+        type: string
+        description: File path within result
+    responses:
+      200:
+        description: File download
+      404:
+        description: Result or file not found
+    """
     if result_id not in result_registry:
         return jsonify({"error": "Result not found"}), 404
     
