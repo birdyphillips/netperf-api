@@ -597,6 +597,104 @@ def collect_snmp():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/snmp/live', methods=['GET'])
+def get_live_snmp():
+    """
+    Get Live SNMP Data from Modem
+    ---
+    tags:
+      - Tests
+    parameters:
+      - in: query
+        name: target_ip
+        type: string
+        description: Modem IPv6 address (uses configured modem_ipv6 if not provided)
+    responses:
+      200:
+        description: Live SNMP data retrieved
+        schema:
+          type: object
+          properties:
+            target_ip:
+              type: string
+            timestamp:
+              type: string
+            metrics:
+              type: object
+      400:
+        description: Modem IPv6 not configured
+      500:
+        description: SNMP collection failed
+    """
+    target_ip = request.args.get('target_ip') or modem_ipv6
+    
+    if not target_ip:
+        return jsonify({"error": "Modem IPv6 not configured. Use POST /api/config/modem first."}), 400
+    
+    try:
+        import tempfile
+        import re
+        
+        # Create temp directory for SNMP output
+        temp_dir = tempfile.mkdtemp()
+        test_name = f"live_snmp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Collect SNMP data
+        collect_snmp_data(target_ip, test_name, "live", temp_dir)
+        
+        # Find the SNMP file
+        snmp_files = [f for f in os.listdir(temp_dir) if f.endswith('.txt')]
+        if not snmp_files:
+            return jsonify({"error": "No SNMP data collected"}), 500
+        
+        # Parse SNMP file
+        snmp_file = os.path.join(temp_dir, snmp_files[0])
+        with open(snmp_file, 'r') as f:
+            content = f.read()
+        
+        # Extract OID values with names
+        oid_pattern = r'SNMPv2-SMI::(.+?) = (.+?): (.+)'
+        matches = re.findall(oid_pattern, content)
+        
+        # OID to metric name mapping
+        oid_names = {
+            'mib-2.2.2.1.10': 'ifInOctets',
+            'mib-2.2.2.1.16': 'ifOutOctets',
+            'mib-2.31.1.1.1.6': 'ifHCInOctets',
+            'mib-2.31.1.1.1.10': 'ifHCOutOctets',
+            'mib-2.2.2.1.11': 'ifInUcastPkts',
+            'mib-2.2.2.1.17': 'ifOutUcastPkts',
+            'mib-2.2.2.1.12': 'ifInNUcastPkts',
+            'mib-2.2.2.1.18': 'ifOutNUcastPkts',
+            'mib-2.2.2.1.13': 'ifInDiscards',
+            'mib-2.2.2.1.19': 'ifOutDiscards',
+            'mib-2.2.2.1.14': 'ifInErrors',
+            'mib-2.2.2.1.20': 'ifOutErrors'
+        }
+        
+        metrics = {}
+        for oid, data_type, value in matches:
+            # Extract numeric value
+            numeric_match = re.search(r'(\d+)', value)
+            if numeric_match:
+                # Get base OID (without interface index)
+                base_oid = '.'.join(oid.split('.')[:-1])
+                metric_name = oid_names.get(base_oid, oid)
+                metrics[metric_name] = int(numeric_match.group(1))
+        
+        # Cleanup temp directory
+        shutil.rmtree(temp_dir)
+        
+        return jsonify({
+            "target_ip": target_ip,
+            "timestamp": datetime.now().isoformat(),
+            "metrics": metrics
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Live SNMP collection failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/bb_flows', methods=['GET'])
 def list_bb_flows():
     """
