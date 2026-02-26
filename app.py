@@ -33,7 +33,7 @@ swagger_config = {
     ],
     "static_url_path": "/flasgger_static",
     "swagger_ui": True,
-    "specs_route": "/swagger/"
+    "specs_route": "/"
 }
 
 swagger_template = {
@@ -64,10 +64,6 @@ logger = Logger("FlaskAPI")
 modem_ipv6 = None
 running_tests = {}  # Store test status
 result_registry = {}  # Map result_id to folder path
-
-@app.route('/', methods=['GET'])
-def serve_ui():
-    return send_from_directory('static', 'index.html')
 
 @app.route('/health', methods=['GET'])
 def health():
