@@ -163,6 +163,14 @@ class Config:
     def snmp_retries(self):
         return self.get('snmp', 'retries', default=2)
     
+    # CMTS
+    @property
+    def vcmts_password(self):
+        # Support multiple config key names for backward compatibility
+        return (self.get('cmts', 'tacacs_password') or 
+                self.get('cmts', 'password') or 
+                self.get('vcmts', 'password'))
+    
     # SSH
     @property
     def ssh_key_path(self):

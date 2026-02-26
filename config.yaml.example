@@ -94,6 +94,18 @@ snmp:
   # SNMP retry count
   retries: 2
 
+# CMTS TACACS Configuration
+cmts:
+  # TACACS password for CMTS authentication
+  tacacs_password: "your_tacacs_password_here"
+
+# CMTS Hosts
+cmts_hosts:
+  - name: "vcmts01.example.com"
+    type: "vcmts"
+  - name: "icmts01.example.com"
+    type: "icmts"
+
 # SSH Configuration
 ssh:
   # Path to SSH private key (supports ~ expansion)

@@ -73,6 +73,7 @@ Swagger-like interface with all 16 endpoints, try-it-out functionality, and live
 ### Health & Configuration
 - `GET /health` - Health check
 - `POST /api/config/modem` - Set modem IPv6 for SNMP
+- `GET /api/cmts/modem/info` - Get CMTS modem information
 
 ### Test Execution
 - `POST /api/byteblower/run` - ByteBlower tests
@@ -98,7 +99,7 @@ Swagger-like interface with all 16 endpoints, try-it-out functionality, and live
 ### Resources
 - `GET /api/bb_flows` - List ByteBlower flows
 
-**Total: 16 endpoints**
+**Total: 17 endpoints**
 
 ---
 

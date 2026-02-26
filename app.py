@@ -10,6 +10,7 @@ from packetstorm_logic import PacketStormLogic
 from iperf3_logic import IPerf3Logic
 from speedtest_logic import SpeedTestLogic
 from snmp_collector import collect_snmp_data
+from cmts_modem_info import collect_cmts_data
 from logger import Logger
 import shutil
 import tempfile
@@ -136,6 +137,82 @@ def set_modem():
     
     logger.info(f"Modem IPv6 configured: {modem_ipv6}")
     return jsonify({"message": "Modem IPv6 set", "ipv6": modem_ipv6}), 200
+
+@app.route('/api/cmts/modem/info', methods=['GET'])
+def get_cmts_modem_info():
+    """
+    Get CMTS Modem Information
+    ---
+    tags:
+      - Health
+    parameters:
+      - in: query
+        name: cmts_host
+        type: string
+        required: true
+        description: CMTS hostname
+        enum: [apc01k1dccc, cts01k1dccc]
+        example: "apc01k1dccc"
+      - in: query
+        name: cm_mac
+        type: string
+        required: true
+        description: Cable modem MAC address
+        example: "e0db.d161.3d18"
+    responses:
+      200:
+        description: Modem information retrieved successfully
+        schema:
+          type: object
+          properties:
+            cm_ipv6:
+              type: string
+              example: "2605:1c00:50f2:203:75c4:f09:ddc3:6c27"
+            cmts_host:
+              type: string
+            cm_mac:
+              type: string
+            cmts_type:
+              type: string
+      400:
+        description: Invalid request - missing required parameters
+      404:
+        description: Cable modem not found
+      500:
+        description: Failed to retrieve modem information
+    """
+    cmts_host = request.args.get('cmts_host')
+    cm_mac = request.args.get('cm_mac')
+    
+    if not all([cmts_host, cm_mac]):
+        return jsonify({"error": "cmts_host and cm_mac are required"}), 400
+    
+    # Auto-detect CMTS type based on hostname
+    if cmts_host == 'apc01k1dccc':
+        cmts_type = 'vcmts'
+    elif cmts_host == 'cts01k1dccc':
+        cmts_type = 'icmts'
+    else:
+        cmts_type = 'vcmts'  # default
+    
+    try:
+        logger.info(f"Collecting {cmts_type.upper()} modem info for {cm_mac} from {cmts_host}")
+        cm_ipv6 = collect_cmts_data(cmts_host, cm_mac, cmts_type, output_dir="Results")
+        
+        if cm_ipv6:
+            logger.info(f"Successfully retrieved modem IPv6: {cm_ipv6}")
+            return jsonify({
+                "cm_ipv6": cm_ipv6,
+                "cmts_host": cmts_host,
+                "cm_mac": cm_mac,
+                "cmts_type": cmts_type
+            }), 200
+        else:
+            logger.warning(f"Cable modem not found: {cm_mac} on {cmts_host}")
+            return jsonify({"error": "Cable modem not found or IPv6 could not be extracted"}), 404
+    except Exception as e:
+        logger.error(f"CMTS modem info collection failed: {e}")
+        return jsonify({"error": str(e)}), 500
 
 def run_snmp_collection(target_ip, test_name, phase, output_dir):
     try:
