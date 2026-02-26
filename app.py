@@ -55,7 +55,8 @@ swagger_template = {
         {"name": "Tests", "description": "Test execution endpoints"},
         {"name": "Results", "description": "Results management"},
         {"name": "Management", "description": "Test status and monitoring"}
-    ]
+    ],
+    "uiversion": 3
 }
 
 Swagger(app, config=swagger_config, template=swagger_template)
