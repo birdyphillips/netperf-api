@@ -17,6 +17,7 @@ import tempfile
 import re
 import threading
 import uuid
+import yaml
 
 app = Flask(__name__)
 CORS(app)
@@ -137,6 +138,118 @@ def set_modem():
     
     logger.info(f"Modem IPv6 configured: {modem_ipv6}")
     return jsonify({"message": "Modem IPv6 set", "ipv6": modem_ipv6}), 200
+
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """
+    Get Configuration
+    ---
+    tags:
+      - Health
+    responses:
+      200:
+        description: Configuration retrieved successfully
+        schema:
+          type: object
+      500:
+        description: Failed to load configuration
+    """
+    try:
+        with open('config.yaml', 'r') as f:
+            config = yaml.safe_load(f)
+        return jsonify(config), 200
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/cmts/devices', methods=['GET'])
+def get_cmts_devices():
+    """
+    Get CPE Device IPs from CMTS
+    ---
+    tags:
+      - Health
+    parameters:
+      - in: query
+        name: cmts_host
+        type: string
+        required: true
+        description: CMTS hostname
+        enum: [apc01k1dccc, cts01k1dccc]
+        example: "apc01k1dccc"
+      - in: query
+        name: cm_mac
+        type: string
+        required: true
+        description: Cable modem MAC address
+        example: "802b.f9fa.ee17"
+    responses:
+      200:
+        description: Device IPs retrieved successfully
+        schema:
+          type: object
+          properties:
+            cmts_host:
+              type: string
+            cm_mac:
+              type: string
+            cmts_type:
+              type: string
+            devices:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  ipv4:
+                    type: string
+                  ipv6:
+                    type: string
+      400:
+        description: Invalid request - missing required parameters
+      500:
+        description: Failed to retrieve device IPs
+    """
+    cmts_host = request.args.get('cmts_host')
+    cm_mac = request.args.get('cm_mac')
+    
+    if not all([cmts_host, cm_mac]):
+        return jsonify({"error": "cmts_host and cm_mac are required"}), 400
+    
+    # Load config
+    try:
+        with open('config.yaml', 'r') as f:
+            config = yaml.safe_load(f)
+    except Exception as e:
+        return jsonify({"error": f"Failed to load config: {str(e)}"}), 500
+    
+    tacacs_password = config['cmts']['tacacs_password']
+    jumpserver = config['snmp']['jumpserver']
+    jumpserver_user = config['snmp']['username']
+    ssh_key_path = config['ssh']['key_path'].replace('~', os.path.expanduser('~'))
+    
+    # Detect CMTS type
+    cmts_type = 'icmts' if 'cts01k1dccc' in cmts_host else 'vcmts'
+    
+    try:
+        logger.info(f"Fetching device IPs from {cmts_type.upper()} {cmts_host} for CM {cm_mac}")
+        
+        # Import get_cpe_ips function
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from get_device_ips import get_cpe_ips
+        
+        devices = get_cpe_ips(cmts_host, cm_mac, tacacs_password, jumpserver, jumpserver_user, ssh_key_path, cmts_type)
+        
+        logger.info(f"Successfully retrieved {len(devices)} devices")
+        return jsonify({
+            "cmts_host": cmts_host,
+            "cm_mac": cm_mac,
+            "cmts_type": cmts_type,
+            "devices": devices
+        }), 200
+    except Exception as e:
+        logger.error(f"Failed to retrieve device IPs: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/cmts/modem/info', methods=['GET'])
 def get_cmts_modem_info():
