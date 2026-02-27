@@ -1,7 +1,7 @@
 {
 	"info": {
-		"name": "NetPerf API",
-		"description": "Network Performance Testing API - ByteBlower, PacketStorm, iPerf3, SpeedTest",
+		"name": "NetPerf API v2.0",
+		"description": "Network Performance Testing API - ByteBlower, PacketStorm, iPerf3, SpeedTest with SNMP monitoring",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -19,228 +19,462 @@
 			"key": "result_id",
 			"value": "c3865f92-d53d-4d05-bc0e-a5b516f0afff",
 			"type": "string"
+		},
+		{
+			"key": "test_id",
+			"value": "550e8400-e29b-41d4-a716-446655440000",
+			"type": "string"
 		}
 	],
 	"item": [
 		{
-			"name": "Health Check",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/health",
-					"host": ["{{base_url}}"],
-					"path": ["health"]
-				}
-			}
-		},
-		{
-			"name": "Set Modem IPv6",
-			"request": {
-				"method": "POST",
-				"header": [{"key": "Content-Type", "value": "application/json"}],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n  \"ipv6\": \"{{modem_ipv6}}\"\n}"
+			"name": "Health & Config",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					}
 				},
-				"url": {
-					"raw": "{{base_url}}/api/config/modem",
-					"host": ["{{base_url}}"],
-					"path": ["api", "config", "modem"]
-				}
-			}
-		},
-		{
-			"name": "ByteBlower - Run Test",
-			"request": {
-				"method": "POST",
-				"header": [{"key": "Content-Type", "value": "application/json"}],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n  \"bbp_file\": \"Port_20_example.bbp\",\n  \"scenario\": \"US_Classic_Only\",\n  \"test_group_name\": \"TEST_SCN_RTT_0\",\n  \"iterations\": 1,\n  \"rtt_config\": \"\",\n  \"async\": false\n}"
+				{
+					"name": "Set Modem IPv6",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ipv6\": \"{{modem_ipv6}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/config/modem",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "modem"]
+						}
+					}
 				},
-				"url": {
-					"raw": "{{base_url}}/api/byteblower/run",
-					"host": ["{{base_url}}"],
-					"path": ["api", "byteblower", "run"]
-				}
-			}
-		},
-		{
-			"name": "PacketStorm - Start",
-			"request": {
-				"method": "POST",
-				"header": [{"key": "Content-Type", "value": "application/json"}],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n  \"rtt_config\": \"vcmts10ms.json\"\n}"
+				{
+					"name": "Get Configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/config",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config"]
+						}
+					}
 				},
-				"url": {
-					"raw": "{{base_url}}/api/packetstorm/start",
-					"host": ["{{base_url}}"],
-					"path": ["api", "packetstorm", "start"]
-				}
-			}
-		},
-		{
-			"name": "PacketStorm - Stop",
-			"request": {
-				"method": "POST",
-				"header": [{"key": "Content-Type", "value": "application/json"}],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n  \"rtt_config\": \"vcmts10ms.json\"\n}"
+				{
+					"name": "Get CMTS Modem Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/cmts/modem/info?cmts_host=apc01k1dccc&cm_mac=e0db.d161.3d18",
+							"host": ["{{base_url}}"],
+							"path": ["api", "cmts", "modem", "info"],
+							"query": [
+								{"key": "cmts_host", "value": "apc01k1dccc"},
+								{"key": "cm_mac", "value": "e0db.d161.3d18"}
+							]
+						}
+					}
 				},
-				"url": {
-					"raw": "{{base_url}}/api/packetstorm/stop",
-					"host": ["{{base_url}}"],
-					"path": ["api", "packetstorm", "stop"]
+				{
+					"name": "Get CPE Device IPs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/cmts/devices?cmts_host=apc01k1dccc&cm_mac=802b.f9fa.ee17",
+							"host": ["{{base_url}}"],
+							"path": ["api", "cmts", "devices"],
+							"query": [
+								{"key": "cmts_host", "value": "apc01k1dccc"},
+								{"key": "cm_mac", "value": "802b.f9fa.ee17"}
+							]
+						}
+					}
 				}
-			}
+			]
 		},
 		{
-			"name": "iPerf3 - Run Test",
-			"request": {
-				"method": "POST",
-				"header": [{"key": "Content-Type", "value": "application/json"}],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n  \"client_ip\": \"96.37.176.19\",\n  \"scenario\": \"US_Classic_Only\",\n  \"test_group_name\": \"TEST_SCN_RTT_0\",\n  \"iterations\": 1,\n  \"output_format\": \"json\",\n  \"platform\": \"linux\",\n  \"rtt_config\": \"\"\n}"
+			"name": "ByteBlower Tests",
+			"item": [
+				{
+					"name": "Run ByteBlower - Single Scenario",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"bbp_file\": \"Port_20_example.bbp\",\n  \"scenario\": \"US_Classic_Only\",\n  \"test_group_name\": \"TEST_SCN_RTT_0\",\n  \"iterations\": 1,\n  \"rtt_config\": \"\",\n  \"async\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/byteblower/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "byteblower", "run"]
+						}
+					}
 				},
-				"url": {
-					"raw": "{{base_url}}/api/iperf3/run",
-					"host": ["{{base_url}}"],
-					"path": ["api", "iperf3", "run"]
-				}
-			}
-		},
-		{
-			"name": "SpeedTest - Run Test",
-			"request": {
-				"method": "POST",
-				"header": [{"key": "Content-Type", "value": "application/json"}],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n  \"clients\": [\"linux\", \"macos\", \"nvidia\"],\n  \"test_group_name\": \"Speedtest\",\n  \"iterations\": 1\n}"
+				{
+					"name": "Run ByteBlower - Multiple Scenarios",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"bbp_file\": \"Port_20_example.bbp\",\n  \"scenario\": \"US_Classic_Only,DS_Classic_Only,US_Combined,DS_Combined\",\n  \"test_group_name\": \"TEST_SCN_RTT_0\",\n  \"iterations\": 1,\n  \"rtt_config\": \"\",\n  \"async\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/byteblower/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "byteblower", "run"]
+						}
+					}
 				},
-				"url": {
-					"raw": "{{base_url}}/api/speedtest/run",
-					"host": ["{{base_url}}"],
-					"path": ["api", "speedtest", "run"]
-				}
-			}
-		},
-		{
-			"name": "SNMP - Collect",
-			"request": {
-				"method": "POST",
-				"header": [{"key": "Content-Type", "value": "application/json"}],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n  \"target_ip\": \"{{modem_ipv6}}\",\n  \"test_name\": \"TEST_SCN_RTT_0\",\n  \"phase\": \"before\",\n  \"output_dir\": \"Results\"\n}"
+				{
+					"name": "Run ByteBlower - With RTT",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"bbp_file\": \"Port_20_example.bbp\",\n  \"scenario\": \"US_Classic_Only\",\n  \"test_group_name\": \"TEST_SCN_RTT_10\",\n  \"iterations\": 1,\n  \"rtt_config\": \"vcmts10ms.json\",\n  \"async\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/byteblower/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "byteblower", "run"]
+						}
+					}
 				},
-				"url": {
-					"raw": "{{base_url}}/api/snmp/collect",
-					"host": ["{{base_url}}"],
-					"path": ["api", "snmp", "collect"]
+				{
+					"name": "Run ByteBlower - Async",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"bbp_file\": \"Port_20_example.bbp\",\n  \"scenario\": \"US_Classic_Only\",\n  \"test_group_name\": \"TEST_SCN_RTT_0\",\n  \"iterations\": 1,\n  \"rtt_config\": \"\",\n  \"async\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/byteblower/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "byteblower", "run"]
+						}
+					}
 				}
-			}
+			]
 		},
 		{
-			"name": "Test Status",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/test/status/{{result_id}}",
-					"host": ["{{base_url}}"],
-					"path": ["api", "test", "status", "{{result_id}}"]
+			"name": "iPerf3 Tests",
+			"item": [
+				{
+					"name": "Run iPerf3 - Linux Single Scenario",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"client_ip\": \"71.85.92.210\",\n  \"scenario\": \"US_Classic_Only\",\n  \"test_group_name\": \"TEST_SCN_RTT_0\",\n  \"iterations\": 1,\n  \"output_format\": \"json\",\n  \"platform\": \"linux\",\n  \"rtt_config\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/iperf3/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "iperf3", "run"]
+						}
+					}
+				},
+				{
+					"name": "Run iPerf3 - Linux Multiple Scenarios",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"client_ip\": \"71.85.92.210\",\n  \"scenario\": \"US_Classic_Only,DS_Classic_Only,US_Combined,DS_Combined\",\n  \"test_group_name\": \"TEST_SCN_RTT_0\",\n  \"iterations\": 1,\n  \"output_format\": \"json\",\n  \"platform\": \"linux\",\n  \"rtt_config\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/iperf3/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "iperf3", "run"]
+						}
+					}
+				},
+				{
+					"name": "Run iPerf3 - Linux With RTT",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"client_ip\": \"71.85.92.210\",\n  \"scenario\": \"US_Classic_Only\",\n  \"test_group_name\": \"TEST_SCN_RTT_10\",\n  \"iterations\": 1,\n  \"output_format\": \"json\",\n  \"platform\": \"linux\",\n  \"rtt_config\": \"vcmts10ms.json\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/iperf3/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "iperf3", "run"]
+						}
+					}
+				},
+				{
+					"name": "Run iPerf3 - macOS (Apple QUIC)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"client_ip\": \"71.85.92.210\",\n  \"scenario\": \"US_Combined\",\n  \"test_group_name\": \"TEST_SCN_RTT_0\",\n  \"iterations\": 1,\n  \"output_format\": \"json\",\n  \"platform\": \"macos\",\n  \"rtt_config\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/iperf3/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "iperf3", "run"]
+						}
+					}
 				}
-			}
+			]
 		},
 		{
-			"name": "List All Tests",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/test/list",
-					"host": ["{{base_url}}"],
-					"path": ["api", "test", "list"]
+			"name": "PacketStorm RTT",
+			"item": [
+				{
+					"name": "Start PacketStorm",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"rtt_config\": \"vcmts10ms.json\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/packetstorm/start",
+							"host": ["{{base_url}}"],
+							"path": ["api", "packetstorm", "start"]
+						}
+					}
+				},
+				{
+					"name": "Stop PacketStorm",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"rtt_config\": \"vcmts10ms.json\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/packetstorm/stop",
+							"host": ["{{base_url}}"],
+							"path": ["api", "packetstorm", "stop"]
+						}
+					}
 				}
-			}
+			]
 		},
 		{
-			"name": "Results - List All",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/results",
-					"host": ["{{base_url}}"],
-					"path": ["api", "results"]
+			"name": "SpeedTest",
+			"item": [
+				{
+					"name": "Run SpeedTest - All Clients",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clients\": [\"linux\", \"macos\", \"nvidia\"],\n  \"test_group_name\": \"Speedtest\",\n  \"iterations\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/speedtest/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "speedtest", "run"]
+						}
+					}
+				},
+				{
+					"name": "Run SpeedTest - Linux Only",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clients\": [\"linux\"],\n  \"test_group_name\": \"Speedtest\",\n  \"iterations\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/speedtest/run",
+							"host": ["{{base_url}}"],
+							"path": ["api", "speedtest", "run"]
+						}
+					}
 				}
-			}
+			]
 		},
 		{
-			"name": "Results - Get Files by ID",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/results/{{result_id}}",
-					"host": ["{{base_url}}"],
-					"path": ["api", "results", "{{result_id}}"]
+			"name": "SNMP",
+			"item": [
+				{
+					"name": "Collect SNMP - Before",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"target_ip\": \"{{modem_ipv6}}\",\n  \"test_name\": \"TEST_SCN_RTT_0\",\n  \"phase\": \"before\",\n  \"output_dir\": \"Results\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/snmp/collect",
+							"host": ["{{base_url}}"],
+							"path": ["api", "snmp", "collect"]
+						}
+					}
+				},
+				{
+					"name": "Collect SNMP - After",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"target_ip\": \"{{modem_ipv6}}\",\n  \"test_name\": \"TEST_SCN_RTT_0\",\n  \"phase\": \"after\",\n  \"output_dir\": \"Results\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/snmp/collect",
+							"host": ["{{base_url}}"],
+							"path": ["api", "snmp", "collect"]
+						}
+					}
+				},
+				{
+					"name": "Get Live SNMP Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/snmp/live",
+							"host": ["{{base_url}}"],
+							"path": ["api", "snmp", "live"]
+						}
+					}
 				}
-			}
+			]
 		},
 		{
-			"name": "Results - Get SNMP Analysis",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/results/{{result_id}}/snmp",
-					"host": ["{{base_url}}"],
-					"path": ["api", "results", "{{result_id}}", "snmp"]
+			"name": "Test Management",
+			"item": [
+				{
+					"name": "Get Test Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/test/status/{{test_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "test", "status", "{{test_id}}"]
+						}
+					}
+				},
+				{
+					"name": "List All Tests",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/test/list",
+							"host": ["{{base_url}}"],
+							"path": ["api", "test", "list"]
+						}
+					}
 				}
-			}
+			]
 		},
 		{
-			"name": "Results - Download Folder by ID",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/results/{{result_id}}/download",
-					"host": ["{{base_url}}"],
-					"path": ["api", "results", "{{result_id}}", "download"]
+			"name": "Results",
+			"item": [
+				{
+					"name": "List All Results",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/results",
+							"host": ["{{base_url}}"],
+							"path": ["api", "results"]
+						}
+					}
+				},
+				{
+					"name": "Get Result Files by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/results/{{result_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "results", "{{result_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Get SNMP Analysis by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/results/{{result_id}}/snmp",
+							"host": ["{{base_url}}"],
+							"path": ["api", "results", "{{result_id}}", "snmp"]
+						}
+					}
+				},
+				{
+					"name": "Download Result Folder (ZIP) by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/results/{{result_id}}/download",
+							"host": ["{{base_url}}"],
+							"path": ["api", "results", "{{result_id}}", "download"]
+						}
+					}
+				},
+				{
+					"name": "Download Result File by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/results/{{result_id}}/download/US_Classic_Only/results.csv",
+							"host": ["{{base_url}}"],
+							"path": ["api", "results", "{{result_id}}", "download", "US_Classic_Only", "results.csv"]
+						}
+					}
 				}
-			}
+			]
 		},
 		{
-			"name": "Results - Download File by ID",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/results/{{result_id}}/download/US_Classic_Only/results.csv",
-					"host": ["{{base_url}}"],
-					"path": ["api", "results", "{{result_id}}", "download", "US_Classic_Only", "results.csv"]
+			"name": "Resources",
+			"item": [
+				{
+					"name": "List ByteBlower Flows",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/bb_flows",
+							"host": ["{{base_url}}"],
+							"path": ["api", "bb_flows"]
+						}
+					}
 				}
-			}
-		},
-		{
-			"name": "BB Flows - List All",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/api/bb_flows",
-					"host": ["{{base_url}}"],
-					"path": ["api", "bb_flows"]
-				}
-			}
+			]
 		}
 	]
 }
