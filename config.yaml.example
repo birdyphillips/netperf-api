@@ -5,17 +5,17 @@
 # ByteBlower Configuration
 byteblower:
   # Path to ByteBlower CLI executable
-  cli_path: "/home/aphillips/Projects/ByteBlower/ByteBlower-CLT"
+  cli_path: "/path/to/ByteBlower-CLT"
   # Directory containing .bbp flow files
   bb_flows_dir: "bb_flows"
 
 # PacketStorm Configuration
 packetstorm:
   # PacketStorm REST API URL
-  url: "http://10.241.0.118/xgui/rest"
+  url: "http://192.168.1.100/xgui/rest"
   # PacketStorm API credentials
   username: "automation"
-  password: "automation"
+  password: "password"
   # API request timeout in seconds
   timeout: 30
 
@@ -23,18 +23,18 @@ packetstorm:
 iperf3_linux:
   client:
     # Linux client IP address
-    host: "96.37.176.19"
+    host: "192.168.1.10"
     # SSH username for Linux client
-    username: "lld"
+    username: "user"
     # SSH password for Linux client
-    password: "aqm@2024"
+    password: "password"
   server:
     # Linux server IP address
-    host: "71.85.92.86"
+    host: "192.168.1.20"
     # SSH username for Linux server
-    username: "lld"
+    username: "user"
     # SSH password for Linux server
-    password: "aqm@2024"
+    password: "password"
   # iPerf3 server ports for Linux (Classic, Prague, UDP Classic, UDP LL)
   ports: [9202, 9205, 9206, 9210]
 
@@ -42,18 +42,18 @@ iperf3_linux:
 iperf3_macos:
   client:
     # macOS client IP address
-    host: "96.37.176.11"
+    host: "192.168.1.11"
     # SSH username for macOS client
-    username: "lld_mac_client"
+    username: "user"
     # SSH password for macOS client
-    password: "aqm@2022"
+    password: "password"
   server:
     # macOS server IP address
-    host: "71.85.92.83"
+    host: "192.168.1.21"
     # SSH username for macOS server
-    username: "mac_studio_server"
+    username: "user"
     # SSH password for macOS server
-    password: "aqm@2022"
+    password: "password"
   # iPerf3 server ports for macOS (QUIC, QUIC L4S, UDP, UDP L4S)
   ports: [9201, 9207, 9209, 9211]
 
@@ -61,34 +61,64 @@ iperf3_macos:
 speedtest:
   linux:
     # Linux SpeedTest client IP
-    host: "96.37.176.7"
+    host: "192.168.1.10"
     # SSH username
-    username: "lld"
+    username: "user"
     # SSH password
-    password: "aqm@2024"
+    password: "password"
+    # MAC address
+    mac: "aa:bb:cc:dd:ee:01"
+    # IPv6 address
+    ipv6: "2001:db8::1"
   macos:
     # macOS SpeedTest client IP
-    host: "96.37.176.11"
+    host: "192.168.1.11"
     # SSH username
-    username: "lld_mac_client"
+    username: "user"
     # SSH password
-    password: "aqm@2022"
+    password: "password"
+    # MAC address
+    mac: "aa:bb:cc:dd:ee:02"
+    # IPv6 address
+    ipv6: "2001:db8::2"
   nvidia:
     # Windows NVIDIA client IP
-    host: "96.37.176.14"
+    host: "192.168.1.12"
     # SSH username (Windows)
     username: "Administrator"
     # SSH password (Windows)
-    password: "aqm@2022"
+    password: "password"
+    # MAC address
+    mac: "aa:bb:cc:dd:ee:03"
+    # IPv6 address
+    ipv6: "2001:db8::3"
+  mac_mini:
+    # Mac Mini client IP
+    host: "192.168.1.13"
+    # SSH username
+    username: "user"
+    # SSH password
+    password: "password"
+    # MAC address
+    mac: "aa:bb:cc:dd:ee:04"
+    # IPv6 address
+    ipv6: "2001:db8::4"
+
+# vCMTS Configuration
+vcmts:
+  # Cable modem MAC address
+  cm_mac: "aa:bb:cc:dd:ee:ff"
+  # vCMTS hostname
+  host: "vcmts.example.com"
 
 # SNMP Configuration
 snmp:
   # Jump server for SNMP access
-  jumpserver: "ctec-jump.ctec.charterlab.com"
+  jumpserver: "jumpserver.example.com"
   # SSH username for jump server
-  username: "aphillips"
+  username: "user"
   # SNMP community string
-  community: "open"
+  community: "public"
   # SNMP timeout in seconds
   timeout: 5
   # SNMP retry count
@@ -97,7 +127,7 @@ snmp:
 # CMTS TACACS Configuration
 cmts:
   # TACACS password for CMTS authentication
-  tacacs_password: "your_tacacs_password_here"
+  tacacs_password: "password"
 
 # CMTS Hosts
 cmts_hosts:
@@ -109,7 +139,7 @@ cmts_hosts:
 # SSH Configuration
 ssh:
   # Path to SSH private key (supports ~ expansion)
-  key_path: "~/.ssh/lld_key"
+  key_path: "~/.ssh/id_rsa"
   # SSH connection timeout in seconds
   connect_timeout: 20
   # SSH command execution timeout in seconds

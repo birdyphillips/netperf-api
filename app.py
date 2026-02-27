@@ -608,19 +608,33 @@ def run_speedtest():
             iterations:
               type: integer
               default: 1
+            target_ip:
+              type: string
+              example: "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"
     responses:
       200:
         description: Test completed successfully
+      400:
+        description: Invalid request
+      500:
+        description: Test failed
     """
-    data = request.json
+    data = request.json if request.json else {}
     clients = data.get('clients', ['linux', 'macos', 'nvidia'])
     test_group_name = data.get('test_group_name', 'Speedtest')
-    iterations = data.get('iterations', 1)
+    iterations = max(1, data.get('iterations', 1) or 1)
+    target_ip = data.get('target_ip') or modem_ipv6
     
-    st = SpeedTestLogic(clients, test_group_name)
-    success = st.run_iterations(iterations)
+    if not target_ip:
+        return jsonify({"error": "target_ip is required or modem IPv6 must be configured"}), 400
     
-    return jsonify({"success": success, "clients": clients, "iterations": iterations})
+    try:
+        st = SpeedTestLogic(clients, test_group_name, target_ip)
+        success = st.run_iterations(iterations)
+        return jsonify({"success": success, "clients": clients, "iterations": iterations}), 200
+    except Exception as e:
+        logger.error(f"SpeedTest failed: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/snmp/collect', methods=['POST'])
 def collect_snmp():

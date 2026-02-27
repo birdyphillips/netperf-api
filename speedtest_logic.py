@@ -17,15 +17,16 @@ except ImportError:
     HAS_PANDAS = False
 
 class SpeedTestLogic:
-    def __init__(self, clients, test_group_name=None):
+    def __init__(self, clients, test_group_name=None, target_ip=None):
         self.logger = Logger("SpeedTestLogic")
         self.clients = clients
         self.test_group_name = test_group_name or "Speedtest"
+        self.target_ip = target_ip or "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"
         self.output_prefix = self._generate_output_prefix()
         
         # Load client configurations from config file
         self.client_configs = {}
-        for client_name in ['linux', 'macos', 'nvidia']:
+        for client_name in ['linux', 'macos', 'nvidia', 'mac_mini']:
             client_cfg = config.speedtest_client_config(client_name)
             if client_cfg:
                 self.client_configs[client_name] = client_cfg
@@ -73,13 +74,12 @@ class SpeedTestLogic:
         
         self.logger.info(f"Starting speedtest on {client_name.upper()} ({host}) - {iterations} iteration(s)")
         
-        target_ip = "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"
         snmp_test_name = f"{self.test_group_name}_{client_name}"
         
         # SNMP collection before
         self.logger.info(f"Running SNMP collection - before {snmp_test_name}")
         try:
-            collect_snmp_data(target_ip, snmp_test_name, "before", output_dir)
+            collect_snmp_data(self.target_ip, snmp_test_name, "before", output_dir)
             self.logger.info(f"✓ SNMP before collection completed for {client_name}")
         except Exception as e:
             self.logger.error(f"✗ SNMP before collection failed for {client_name}: {e}")
@@ -125,7 +125,7 @@ class SpeedTestLogic:
         # SNMP collection after
         self.logger.info(f"Running SNMP collection - after {snmp_test_name}")
         try:
-            collect_snmp_data(target_ip, snmp_test_name, "after", output_dir)
+            collect_snmp_data(self.target_ip, snmp_test_name, "after", output_dir)
             self.logger.info(f"✓ SNMP after collection completed for {client_name}")
         except Exception as e:
             self.logger.error(f"✗ SNMP after collection failed for {client_name}: {e}")
