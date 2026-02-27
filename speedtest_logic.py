@@ -26,7 +26,7 @@ class SpeedTestLogic:
         
         # Load client configurations from config file
         self.client_configs = {}
-        for client_name in ['linux', 'macos', 'nvidia', 'mac_mini']:
+        for client_name in ['linux', 'linux_client_2', 'macos', 'nvidia', 'mac_mini']:
             client_cfg = config.speedtest_client_config(client_name)
             if client_cfg:
                 self.client_configs[client_name] = client_cfg

@@ -366,12 +366,15 @@ def run_byteblower():
             iterations:
               type: integer
               default: 1
+              minimum: 1
+              example: 1
             rtt_config:
               type: string
               example: "vcmts10ms.json"
             async:
               type: boolean
               default: false
+              description: "Run test asynchronously in background (returns immediately with test_id)"
     responses:
       200:
         description: Test completed successfully
@@ -389,7 +392,7 @@ def run_byteblower():
     bbp_file = data.get('bbp_file')
     scenarios = data.get('scenario')
     test_group_name = data.get('test_group_name')
-    iterations = data.get('iterations', 1)
+    iterations = max(1, data.get('iterations', 1) or 1)
     rtt_configs = data.get('rtt_config', '')
     async_mode = data.get('async', False)
     
@@ -609,6 +612,8 @@ def run_iperf3():
             iterations:
               type: integer
               default: 1
+              minimum: 1
+              example: 1
             platform:
               type: string
               enum: [linux, macos]
@@ -635,7 +640,7 @@ def run_iperf3():
     client_ip = data.get('client_ip')
     scenarios = data.get('scenario')
     test_group_name = data.get('test_group_name')
-    iterations = data.get('iterations', 1)
+    iterations = max(1, data.get('iterations', 1) or 1)
     output_format = data.get('output_format', 'json')
     platform = data.get('platform', 'linux')
     rtt_configs = data.get('rtt_config', '')
@@ -721,6 +726,8 @@ def run_speedtest():
             iterations:
               type: integer
               default: 1
+              minimum: 1
+              example: 1
             target_ip:
               type: string
               example: "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"
@@ -778,6 +785,7 @@ def collect_snmp():
             output_dir:
               type: string
               default: "Results"
+              example: "Results"
     responses:
       200:
         description: SNMP data collected successfully
@@ -860,31 +868,37 @@ def get_live_snmp():
         oid_pattern = r'SNMPv2-SMI::(.+?) = (.+?): (.+)'
         matches = re.findall(oid_pattern, content)
         
-        # OID to metric name mapping
-        oid_names = {
-            'mib-2.2.2.1.10': 'ifInOctets',
-            'mib-2.2.2.1.16': 'ifOutOctets',
-            'mib-2.31.1.1.1.6': 'ifHCInOctets',
-            'mib-2.31.1.1.1.10': 'ifHCOutOctets',
-            'mib-2.2.2.1.11': 'ifInUcastPkts',
-            'mib-2.2.2.1.17': 'ifOutUcastPkts',
-            'mib-2.2.2.1.12': 'ifInNUcastPkts',
-            'mib-2.2.2.1.18': 'ifOutNUcastPkts',
-            'mib-2.2.2.1.13': 'ifInDiscards',
-            'mib-2.2.2.1.19': 'ifOutDiscards',
-            'mib-2.2.2.1.14': 'ifInErrors',
-            'mib-2.2.2.1.20': 'ifOutErrors'
+        # OID prefix to section name mapping
+        oid_sections = {
+            'enterprises.4491.2.1.21.1.4': 'Flow Stats Table (Entry Qos Service Flow Octets)',
+            'enterprises.4491.2.1.21.1.27': 'Aggregate Service Flow Stats Table',
+            'enterprises.4491.2.1.21.1.29': 'Latency Stats Table',
+            'enterprises.4491.2.1.21.1.30': 'Congestion Stats Table',
+            'enterprises.4998.1.1.15.10.2': 'Cadant Map Stats Mib',
+            'enterprises.4998.1.1.15.10.8': 'Map Stats Pages Flows',
+            'enterprises.15007': 'Cadant Map Stats Mib',
+            'mib-2': 'Current Modem Information'
         }
         
-        metrics = {}
+        sections = {}
         for oid, data_type, value in matches:
             # Extract numeric value
             numeric_match = re.search(r'(\d+)', value)
             if numeric_match:
-                # Get base OID (without interface index)
-                base_oid = '.'.join(oid.split('.')[:-1])
-                metric_name = oid_names.get(base_oid, oid)
-                metrics[metric_name] = int(numeric_match.group(1))
+                # Determine section name
+                section_name = 'Unknown'
+                for prefix, name in oid_sections.items():
+                    if oid.startswith(prefix):
+                        section_name = name
+                        break
+                
+                if section_name not in sections:
+                    sections[section_name] = {}
+                
+                sections[section_name][oid] = {
+                    'value': int(numeric_match.group(1)),
+                    'type': data_type
+                }
         
         # Cleanup temp directory
         shutil.rmtree(temp_dir)
@@ -892,7 +906,7 @@ def get_live_snmp():
         return jsonify({
             "target_ip": target_ip,
             "timestamp": datetime.now().isoformat(),
-            "metrics": metrics
+            "sections": sections
         }), 200
         
     except Exception as e:
