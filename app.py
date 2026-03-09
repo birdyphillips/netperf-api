@@ -456,16 +456,19 @@ def _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iteratio
             running_tests[test_id]["result_id"] = result_id
         
         all_success = True
+        test_count = 0
+        total_tests = len(scenario_list) * len(rtt_list)
         
         for scenario in scenario_list:
             for rtt_file in rtt_list:
+                test_count += 1
                 rtt_suffix_current = ""
                 if rtt_file:
                     rtt_match = re.search(r'(\d+)ms', rtt_file)
                     if rtt_match:
                         rtt_suffix_current = f"_RTT_{rtt_match.group(1)}ms"
                 
-                logger.info(f"\nRunning scenario: {scenario}{rtt_suffix_current}")
+                logger.info(f"\nRunning scenario: {scenario}{rtt_suffix_current} ({test_count}/{total_tests})")
                 
                 # Start PacketStorm if RTT config provided
                 ps = None
@@ -503,6 +506,12 @@ def _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iteratio
                     if not ps.stop_config():
                         logger.error("Failed to stop PacketStorm config")
                         all_success = False
+                
+                # Wait 15 seconds between tests (except after last test)
+                if test_count < total_tests:
+                    import time
+                    logger.info("Waiting 15 seconds before next test...")
+                    time.sleep(15)
         
         logger.info(f"\nTest completed: {test_id}")
         logger.info(f"Success: {all_success}")
