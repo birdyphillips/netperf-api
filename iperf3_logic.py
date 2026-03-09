@@ -115,6 +115,22 @@ class IPerf3Logic:
                     f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_UDP_NC_QUIC.{file_ext} &",
                     f"iperf3-darwin -c {self.client_ip} -u -b 530M --dscp 45 -t 30 -p 9211 {json_ext} > DS_{group_name}_UDP_NC.{file_ext} &",
                     "wait"
+                ],
+                "US_LL_1TCP_LL": [
+                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > US_{group_name}_LL_1TCP_LL.{file_ext} &",
+                    "wait"
+                ],
+                "US_LL_4TCP_LL": [
+                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 30 -P 4 -p 9207 --apple-l4s {json_ext} > US_{group_name}_LL_4TCP_LL.{file_ext} &",
+                    "wait"
+                ],
+                "DS_LL_1TCP_LL": [
+                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_LL_1TCP_LL.{file_ext} &",
+                    "wait"
+                ],
+                "DS_LL_4TCP_LL": [
+                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 4 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_LL_4TCP_LL.{file_ext} &",
+                    "wait"
                 ]
             }
             # macOS uses different server ports
@@ -162,6 +178,22 @@ class IPerf3Logic:
                 ],
                 "DS_UDP_NC": [
                     f"iperf3 -c {self.client_ip} -t 30 -u -b 0.82M -p 9202 -P 1 {json_ext} > DS_{group_name}_UDP_NC.{file_ext} &",
+                    "wait"
+                ],
+                "US_LL_1TCP_LL": [
+                    f"iperf3 -c {self.server_ip} -t 30 -p 9205 -P 1 -C prague -J > US_{group_name}_LL_1TCP_LL.json &",
+                    "wait"
+                ],
+                "US_LL_4TCP_LL": [
+                    f"iperf3 -c {self.server_ip} -t 30 -p 9205 -P 4 -C prague -J > US_{group_name}_LL_4TCP_LL.json &",
+                    "wait"
+                ],
+                "DS_LL_1TCP_LL": [
+                    f"iperf3 -c {self.client_ip} -t 30 -p 9205 -P 1 -C prague -J > DS_{group_name}_LL_1TCP_LL.json &",
+                    "wait"
+                ],
+                "DS_LL_4TCP_LL": [
+                    f"iperf3 -c {self.client_ip} -t 30 -p 9205 -P 4 -C prague -J > DS_{group_name}_LL_4TCP_LL.json &",
                     "wait"
                 ]
             }
@@ -562,14 +594,17 @@ class IPerf3Logic:
                 
                 processes.append(proc)
             
-            # Wait for all processes to complete
-            self.logger.info(f"Waiting for flows to complete (30s timeout)...")
+            # Wait for all processes to complete with progress
+            self.logger.info(f"Test running (30s duration)...")
+            print(f"\n[{self.scenario_name}] Test in progress...", flush=True)
             for idx, proc in enumerate(processes, 1):
                 stdout, stderr = proc.communicate()
                 if proc.returncode != 0:
                     self.logger.error(f"Flow {idx} failed: {stderr}")
+                    print(f"  ✗ Flow {idx} failed", flush=True)
                 else:
                     self.logger.info(f"Flow {idx} completed")
+                    print(f"  ✓ Flow {idx} completed", flush=True)
             
             # Check final results
             wait_cmd = f"cd {remote_dir} && ls -la"
@@ -628,6 +663,7 @@ class IPerf3Logic:
             
             result_files = [f for f in os.listdir(output_dir) if f.endswith(('.json', '.txt'))]
             self.logger.info(f"✓ Iteration {iteration + 1} completed - {len(result_files)} result files")
+            print(f"\n✓ [{self.scenario_name}] Completed - {len(result_files)} files saved to {output_dir}\n", flush=True)
             
             # Wait 10 seconds between iterations (except after last iteration)
             if iteration < total_iterations - 1:
@@ -669,6 +705,9 @@ class IPerf3Logic:
                 time.sleep(10)
         
         self.logger.info(f"iPerf3 completed: {success_count}/{count} iterations successful")
+        print(f"\n{'='*60}", flush=True)
+        print(f"✓ All scenarios completed: {success_count}/{count} successful", flush=True)
+        print(f"{'='*60}\n", flush=True)
         
         # Stop iPerf3 servers after completion
         self.stop_iperf3_servers()

@@ -466,8 +466,19 @@ def _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iteratio
                         rtt_suffix_current = f"_RTT_{rtt_match.group(1)}ms"
                 
                 logger.info(f"\nRunning scenario: {scenario}{rtt_suffix_current}")
+                
+                # Start PacketStorm if RTT config provided
+                ps = None
+                if rtt_file:
+                    logger.info(f"Starting PacketStorm with config: {rtt_file}")
+                    ps = PacketStormLogic(rtt_file)
+                    if not ps.start_config():
+                        logger.error(f"Failed to start PacketStorm config: {rtt_file}")
+                        all_success = False
+                        continue
+                
                 bb = ByteBlowerLogic(bbp_file, scenario, scenario, test_group_name, rtt_suffix_current, "html pdf csv xls xlsx json docx")
-                snmp_dir = os.path.join(parent_output_dir, scenario + rtt_suffix_current)
+                snmp_dir = os.path.join(parent_output_dir, scenario)
                 os.makedirs(snmp_dir, exist_ok=True)
                 logger.info(f"SNMP directory: {snmp_dir}")
                 
@@ -485,6 +496,13 @@ def _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iteratio
                     if modem_ipv6:
                         logger.info(f"Collecting SNMP after - iteration {i+1}")
                         run_snmp_collection(modem_ipv6, f"ByteBlower_{scenario}_iteration_{i+1}", "after", snmp_dir)
+                
+                # Stop PacketStorm if it was started
+                if ps:
+                    logger.info("Stopping PacketStorm")
+                    if not ps.stop_config():
+                        logger.error("Failed to stop PacketStorm config")
+                        all_success = False
         
         logger.info(f"\nTest completed: {test_id}")
         logger.info(f"Success: {all_success}")
