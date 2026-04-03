@@ -11,6 +11,7 @@ from iperf3_logic import IPerf3Logic
 from speedtest_logic import SpeedTestLogic
 from snmp_collector import collect_snmp_data
 from cmts_modem_info import collect_cmts_data
+from latency_calculator import generate_latency_report, find_snmp_files, parse_latency_bins, compute_deltas, calc_percentile, calc_percentile_avg, calc_weighted_avg, BIN_EDGES_MS, NUM_BINS
 from logger import Logger
 import shutil
 import tempfile
@@ -332,6 +333,9 @@ def run_snmp_collection(target_ip, test_name, phase, output_dir):
         logger.info(f"Running SNMP collection - {phase} {test_name}")
         collect_snmp_data(target_ip, test_name, phase, output_dir)
         return True
+    except TimeoutError:
+        logger.error(f"SNMP timeout: No response from {target_ip}")
+        return False
     except Exception as e:
         logger.error(f"SNMP collection failed: {e}")
         return False
@@ -499,6 +503,9 @@ def _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iteratio
                     if modem_ipv6:
                         logger.info(f"Collecting SNMP after - iteration {i+1}")
                         run_snmp_collection(modem_ipv6, f"ByteBlower_{scenario}_iteration_{i+1}", "after", snmp_dir)
+                
+                # Generate latency report from SNMP before/after
+                _run_latency_report(snmp_dir)
                 
                 # Stop PacketStorm if it was started
                 if ps:
@@ -725,6 +732,7 @@ def run_iperf3():
                 if modem_ipv6:
                     run_snmp_collection(modem_ipv6, f"iPerf3{platform_suffix}_{scenario}_iteration_{i+1}", "after", snmp_dir)
             
+            _run_latency_report(snmp_dir)
             iperf3.stop_iperf3_servers()
     
     return jsonify({"success": all_success, "output_dir": parent_output_dir, "scenarios": len(scenario_list), "rtt_configs": len(rtt_list), "iterations": iterations})
@@ -818,6 +826,8 @@ def collect_snmp():
         description: SNMP data collected successfully
       400:
         description: Invalid request
+      504:
+        description: SNMP timeout - no response from target IP
       500:
         description: Collection failed
     """
@@ -833,6 +843,8 @@ def collect_snmp():
     try:
         collect_snmp_data(target_ip, test_name, phase, output_dir)
         return jsonify({"success": True, "phase": phase})
+    except TimeoutError as e:
+        return jsonify({"error": str(e), "target_ip": target_ip}), 504
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -862,6 +874,8 @@ def get_live_snmp():
               type: object
       400:
         description: Modem IPv6 not configured
+      504:
+        description: SNMP timeout - no response from target IP
       500:
         description: SNMP collection failed
     """
@@ -879,7 +893,11 @@ def get_live_snmp():
         test_name = f"live_snmp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         # Collect SNMP data
-        collect_snmp_data(target_ip, test_name, "live", temp_dir)
+        try:
+            collect_snmp_data(target_ip, test_name, "live", temp_dir)
+        except TimeoutError:
+            shutil.rmtree(temp_dir)
+            return jsonify({"error": f"SNMP timeout: No response from {target_ip}", "target_ip": target_ip}), 504
         
         # Find the SNMP file
         snmp_files = [f for f in os.listdir(temp_dir) if f.endswith('.txt')]
@@ -1240,6 +1258,245 @@ def get_snmp_analysis(result_id):
         "result_id": result_id,
         "iterations": analysis
     }), 200
+
+def _run_latency_report(snmp_dir):
+    """Generate latency bin report from SNMP before/after files in a directory."""
+    try:
+        before_file, after_file = find_snmp_files(snmp_dir)
+        if before_file and after_file:
+            result = generate_latency_report(before_file, after_file)
+            if result:
+                logger.info(f"✓ Latency report: {os.path.basename(result)}")
+            else:
+                logger.warning("Latency report skipped (no latency data in SNMP)")
+        else:
+            logger.warning(f"Latency report skipped (SNMP files not found in {snmp_dir})")
+    except Exception as e:
+        logger.error(f"Latency report failed: {e}")
+
+
+@app.route('/api/results/<result_id>/latency', methods=['GET'])
+def get_latency_analysis(result_id):
+    """
+    Get Latency Bin Analysis from SNMP Before/After Data
+    ---
+    tags:
+      - Results
+    parameters:
+      - in: path
+        name: result_id
+        required: true
+        type: string
+        description: Result UUID
+      - in: query
+        name: generate_excel
+        type: boolean
+        default: false
+        description: Also generate Excel report in result folder
+    responses:
+      200:
+        description: Latency bin analysis with percentiles per service flow
+        schema:
+          type: object
+          properties:
+            result_id:
+              type: string
+            service_flows:
+              type: array
+              items:
+                type: object
+                properties:
+                  sfid:
+                    type: integer
+                  total_packets:
+                    type: integer
+                  p50_ms:
+                    type: number
+                  p99_ms:
+                    type: number
+                  p999_ms:
+                    type: number
+                  peak_bin:
+                    type: string
+                  bins:
+                    type: array
+                    items:
+                      type: object
+      404:
+        description: Result not found or no latency data
+    """
+    if result_id not in result_registry:
+        return jsonify({"error": "Result not found"}), 404
+
+    result_path = result_registry[result_id]
+    if not os.path.exists(result_path):
+        return jsonify({"error": "Result folder not found"}), 404
+
+    gen_excel = request.args.get('generate_excel', 'false').lower() == 'true'
+
+    # Find SNMP before/after pairs across all subdirectories
+    all_sf_data = []
+    for root, dirs, files in os.walk(result_path):
+        before_file, after_file = find_snmp_files(root)
+        if not before_file or not after_file:
+            continue
+
+        before_bins = parse_latency_bins(before_file)
+        after_bins = parse_latency_bins(after_file)
+        all_deltas = compute_deltas(before_bins, after_bins)
+
+        if not all_deltas:
+            continue
+
+        subdir = os.path.relpath(root, result_path)
+
+        for sfid, sf_data in sorted(all_deltas.items()):
+            deltas = sf_data["deltas"]
+            total = sum(deltas)
+            p50 = calc_percentile(deltas, 0.50)
+            p99 = calc_percentile(deltas, 0.99)
+            p999 = calc_percentile(deltas, 0.999)
+            peak_idx = deltas.index(max(deltas))
+
+            bins_detail = []
+            cumulative = 0
+            for i in range(NUM_BINS):
+                cumulative += deltas[i]
+                bins_detail.append({
+                    "bin": i + 1,
+                    "lower_ms": BIN_EDGES_MS[i],
+                    "upper_ms": BIN_EDGES_MS[i + 1],
+                    "delta": deltas[i],
+                    "cumulative": cumulative,
+                    "cumulative_pct": round(cumulative / total * 100, 2) if total else 0,
+                })
+
+            all_sf_data.append({
+                "directory": subdir,
+                "sfid": sfid,
+                "total_packets": total,
+                "avg_ms": round(calc_weighted_avg(deltas), 4),
+                "p50_ms": round(p50, 4),
+                "p99_ms": round(p99, 4),
+                "p999_ms": round(p999, 4),
+                "p50_avg_ms": round(calc_percentile_avg(deltas, 0.50), 4),
+                "p99_avg_ms": round(calc_percentile_avg(deltas, 0.99), 4),
+                "p999_avg_ms": round(calc_percentile_avg(deltas, 0.999), 4),
+                "peak_bin": f"{BIN_EDGES_MS[peak_idx]}-{BIN_EDGES_MS[peak_idx+1]} ms",
+                "bins": bins_detail,
+            })
+
+        if gen_excel:
+            generate_latency_report(before_file, after_file)
+
+    if not all_sf_data:
+        return jsonify({"error": "No latency data found in SNMP files"}), 404
+
+    return jsonify({"result_id": result_id, "service_flows": all_sf_data}), 200
+
+
+@app.route('/api/latency/calculate', methods=['POST'])
+def calculate_latency():
+    """
+    Calculate Latency from SNMP Before/After Files
+    ---
+    tags:
+      - Results
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - results_dir
+          properties:
+            results_dir:
+              type: string
+              description: Path to results directory containing SNMP before/after files
+              example: "Results/Config_4_iPerf3_Linux_20260325_173114"
+            generate_excel:
+              type: boolean
+              default: true
+              description: Generate Excel report
+    responses:
+      200:
+        description: Latency calculated successfully
+        schema:
+          type: object
+          properties:
+            service_flows:
+              type: array
+              items:
+                type: object
+                properties:
+                  sfid:
+                    type: integer
+                  total_packets:
+                    type: integer
+                  p50_ms:
+                    type: number
+                  p99_ms:
+                    type: number
+                  p999_ms:
+                    type: number
+            excel_report:
+              type: string
+      400:
+        description: Invalid request
+      404:
+        description: No SNMP files or latency data found
+    """
+    data = request.json
+    if not data:
+        return jsonify({"error": "Request body is required"}), 400
+
+    results_dir = data.get('results_dir')
+    if not results_dir:
+        return jsonify({"error": "results_dir is required"}), 400
+
+    if not os.path.isdir(results_dir):
+        return jsonify({"error": f"Directory not found: {results_dir}"}), 404
+
+    gen_excel = data.get('generate_excel', True)
+
+    before_file, after_file = find_snmp_files(results_dir)
+    if not before_file or not after_file:
+        return jsonify({"error": "No SNMP before/after files found"}), 404
+
+    before_bins = parse_latency_bins(before_file)
+    after_bins = parse_latency_bins(after_file)
+    all_deltas = compute_deltas(before_bins, after_bins)
+
+    if not all_deltas:
+        return jsonify({"error": "No latency data (all deltas zero)"}), 404
+
+    sf_results = []
+    for sfid, sf_data in sorted(all_deltas.items()):
+        deltas = sf_data["deltas"]
+        total = sum(deltas)
+        sf_results.append({
+            "sfid": sfid,
+            "total_packets": total,
+            "avg_ms": round(calc_weighted_avg(deltas), 4),
+            "p50_ms": round(calc_percentile(deltas, 0.50), 4),
+            "p99_ms": round(calc_percentile(deltas, 0.99), 4),
+            "p999_ms": round(calc_percentile(deltas, 0.999), 4),
+            "p50_avg_ms": round(calc_percentile_avg(deltas, 0.50), 4),
+            "p99_avg_ms": round(calc_percentile_avg(deltas, 0.99), 4),
+            "p999_avg_ms": round(calc_percentile_avg(deltas, 0.999), 4),
+            "peak_bin": f"{BIN_EDGES_MS[deltas.index(max(deltas))]}-{BIN_EDGES_MS[deltas.index(max(deltas))+1]} ms",
+        })
+
+    response = {"service_flows": sf_results, "before_file": before_file, "after_file": after_file}
+
+    if gen_excel:
+        report = generate_latency_report(before_file, after_file)
+        if report:
+            response["excel_report"] = report
+
+    return jsonify(response), 200
+
 
 @app.route('/api/results/<result_id>/download', methods=['GET'])
 def download_result_folder(result_id):
