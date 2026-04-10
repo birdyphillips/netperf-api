@@ -83,6 +83,7 @@ Swagger(app, config=swagger_config, template=swagger_template)
 logger = Logger("FlaskAPI")
 
 modem_ipv6 = None
+modem_cm_mac = None
 running_tests = {}  # Store test status
 result_registry = {}  # Map result_id to folder path
 cmts_collectors = {}  # Active CMTS Kafka collectors by test_id
@@ -93,9 +94,12 @@ def _start_cmts_collection(test_id, scenario, output_dir):
     if not CMTS_KAFKA_AVAILABLE:
         logger.warning("CMTS Kafka collector not available (kafka-python not installed)")
         return None
+    if not modem_cm_mac:
+        logger.warning("CM MAC not configured — skipping CMTS Kafka collection. Use POST /api/config/modem")
+        return None
     try:
         direction = "upstream" if scenario.lower().startswith("us") else "downstream"
-        collector = CmtsCollector(direction=direction)
+        collector = CmtsCollector(mac=modem_cm_mac, direction=direction)
         collector.start()
         cmts_collectors[test_id] = {"collector": collector, "output_dir": output_dir, "scenario": scenario}
         return collector
@@ -146,7 +150,7 @@ def health():
 @app.route('/api/config/modem', methods=['POST'])
 def set_modem():
     """
-    Set Modem IPv6 for SNMP Collection
+    Set Modem IPv6 and CM MAC for SNMP/Kafka Collection
     ---
     tags:
       - Health
@@ -161,14 +165,18 @@ def set_modem():
           properties:
             ipv6:
               type: string
-              example: "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"
+              example: "2605:1c00:50f2:203:9826:3c40:8796:1c3"
+            cm_mac:
+              type: string
+              description: "Cable modem MAC (any format: 206a.9492.23b8 or 20:6a:94:92:23:b8 or 206a949223b8)"
+              example: "206a.9492.23b8"
     responses:
       200:
-        description: Modem IPv6 configured successfully
+        description: Modem configured successfully
       400:
         description: Invalid request
     """
-    global modem_ipv6
+    global modem_ipv6, modem_cm_mac
     data = request.json
     if not data:
         return jsonify({"error": "Request body is required"}), 400
@@ -177,8 +185,20 @@ def set_modem():
     if not modem_ipv6:
         return jsonify({"error": "ipv6 is required"}), 400
     
+    cm_mac_input = data.get('cm_mac')
+    if cm_mac_input:
+        try:
+            from cmts_modem_info import normalize_mac
+            modem_cm_mac = normalize_mac(cm_mac_input)
+            logger.info(f"CM MAC configured: {modem_cm_mac}")
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+    
     logger.info(f"Modem IPv6 configured: {modem_ipv6}")
-    return jsonify({"message": "Modem IPv6 set", "ipv6": modem_ipv6}), 200
+    response = {"message": "Modem configured", "ipv6": modem_ipv6}
+    if modem_cm_mac:
+        response["cm_mac"] = modem_cm_mac
+    return jsonify(response), 200
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
@@ -350,16 +370,26 @@ def get_cmts_modem_info():
         cmts_type = 'vcmts'  # default
     
     try:
-        logger.info(f"Collecting {cmts_type.upper()} modem info for {cm_mac} from {cmts_host}")
-        cm_ipv6 = collect_cmts_data(cmts_host, cm_mac, cmts_type, output_dir="Results")
+        from cmts_modem_info import normalize_mac
+        cm_mac_normalized = normalize_mac(cm_mac)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    
+    try:
+        logger.info(f"Collecting {cmts_type.upper()} modem info for {cm_mac_normalized} from {cmts_host}")
+        cm_ipv6 = collect_cmts_data(cmts_host, cm_mac_normalized, cmts_type, output_dir="Results")
         
         if cm_ipv6:
-            logger.info(f"Successfully retrieved modem IPv6: {cm_ipv6}")
+            global modem_ipv6, modem_cm_mac
+            modem_ipv6 = cm_ipv6
+            modem_cm_mac = cm_mac_normalized
+            logger.info(f"Auto-configured modem — IPv6: {modem_ipv6}, MAC: {modem_cm_mac}")
             return jsonify({
                 "cm_ipv6": cm_ipv6,
                 "cmts_host": cmts_host,
-                "cm_mac": cm_mac,
-                "cmts_type": cmts_type
+                "cm_mac": cm_mac_normalized,
+                "cmts_type": cmts_type,
+                "auto_configured": True
             }), 200
         else:
             logger.warning(f"Cable modem not found: {cm_mac} on {cmts_host}")
