@@ -1,4 +1,4 @@
-# NetPerf API v2.0
+# NetPerf API v2.1
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![Flask](https://img.shields.io/badge/Flask-3.0%2B-green.svg)](https://flask.palletsprojects.com/)
@@ -15,6 +15,7 @@ REST API for automated DOCSIS 3.1 and 4.0 network performance testing with ByteB
 - **PacketStorm RTT** - Configurable round-trip time emulation
 - **SpeedTest** - Multi-client speed testing (Linux, macOS, Windows)
 - **SNMP Monitoring** - Automatic before/after data collection with delta analysis
+- **CMTS Kafka Telemetry** - Real-time downstream latency collection from Harmonic vCMTS
 - **Async Execution** - Background test execution with status polling
 - **Result Management** - UUID-based result identification, ZIP downloads, file browsing
 - **Multi-Scenario** - Run multiple test scenarios in single API call
@@ -944,19 +945,28 @@ netperf_api/
 ├── iperf3_logic.py        # iPerf3 test execution
 ├── packetstorm_logic.py   # RTT configuration
 ├── speedtest_logic.py     # SpeedTest execution
-├── snmp_collector.py      # SNMP data collection
+├── snmp_collector.py      # SNMP collection + latency calculations
+├── cmts_collector.py      # CMTS Kafka telemetry (downstream latency)
 ├── config_loader.py       # Configuration management
 ├── logger.py              # Logging system
 └── bb_flows/              # ByteBlower flow definitions
 ```
 
+### Latency Data Sources
+
+| Direction | Source | Collector | Report |
+|-----------|--------|-----------|--------|
+| Upstream | SNMP (before/after) | snmp_collector.py | Latency_Bin_Report_*.xlsx |
+| Downstream | Kafka real-time stream | cmts_collector.py | CMTS_Latency_Report_*.xlsx |
+
 ### Test Flow
 1. **Configuration** - Set modem IPv6 via `/api/config/modem`
 2. **Execution** - POST to test endpoint (sync or async)
-3. **SNMP Collection** - Automatic before/after capture
-4. **Results** - UUID-based result identification
-5. **Analysis** - SNMP delta calculations, report generation
-6. **Download** - ZIP archives or individual files
+3. **SNMP Collection** - Automatic before/after capture (upstream latency)
+4. **CMTS Kafka Collection** - Real-time downstream dp_flow_* metrics during test
+5. **Results** - UUID-based result identification
+6. **Reports** - SNMP Latency_Bin_Report + CMTS_Latency_Report Excel files
+7. **Download** - ZIP archives or individual files
 
 ---
 
@@ -994,8 +1004,112 @@ git clone git@github.com:birdyphillips/netperf-api.git
 cd netperf-api
 pip install -r requirements.txt
 cp config.yaml.example config.yaml
-# Edit config.yaml with your settings
 ./start_api.sh
+```
+
+## 🔥 cURL Quick Reference
+
+```bash
+BASE=http://localhost:5000
+
+# Health check
+curl $BASE/health
+
+# Set modem IPv6 (required for SNMP collection)
+curl -X POST $BASE/api/config/modem \
+  -H "Content-Type: application/json" \
+  -d '{"ipv6": "2605:1c00:50f2:203:9826:3c40:8796:1c3"}'
+
+# Get CMTS modem info
+curl "$BASE/api/cmts/modem/info?cmts_host=apc01k1dccc&cm_mac=206a.9492.23b8"
+
+# Run ByteBlower test (sync)
+curl -X POST $BASE/api/byteblower/run \
+  -H "Content-Type: application/json" \
+  -d '{"bbp_file":"Port_16_example.bbp","scenario":"DS_Classic_Only","test_group_name":"HSI021"}'
+
+# Run ByteBlower test (async)
+curl -X POST $BASE/api/byteblower/run \
+  -H "Content-Type: application/json" \
+  -d '{"bbp_file":"Port_16_example.bbp","scenario":"DS_Classic_Only","test_group_name":"HSI021","async":true}'
+
+# Run ByteBlower with PacketStorm RTT
+curl -X POST $BASE/api/byteblower/run \
+  -H "Content-Type: application/json" \
+  -d '{"bbp_file":"Port_16_example.bbp","scenario":"DS_Classic_Only","test_group_name":"HSI021_RTT10","rtt_config":"vcmts10ms.json"}'
+
+# Run ByteBlower multiple scenarios
+curl -X POST $BASE/api/byteblower/run \
+  -H "Content-Type: application/json" \
+  -d '{"bbp_file":"Port_16_example.bbp","scenario":"US_Classic_Only,DS_Classic_Only","test_group_name":"HSI021"}'
+
+# Run iPerf3 Linux
+curl -X POST $BASE/api/iperf3/run \
+  -H "Content-Type: application/json" \
+  -d '{"client_ip":"96.37.176.19","scenario":"US_Classic_Only","test_group_name":"TEST","platform":"linux"}'
+
+# Run iPerf3 macOS (Apple QUIC/L4S)
+curl -X POST $BASE/api/iperf3/run \
+  -H "Content-Type: application/json" \
+  -d '{"client_ip":"96.37.176.11","scenario":"US_Combined","test_group_name":"TEST","platform":"macos"}'
+
+# Start/Stop PacketStorm
+curl -X POST $BASE/api/packetstorm/start -H "Content-Type: application/json" -d '{"rtt_config":"vcmts10ms.json"}'
+curl -X POST $BASE/api/packetstorm/stop -H "Content-Type: application/json" -d '{"rtt_config":"vcmts10ms.json"}'
+
+# Run SpeedTest
+curl -X POST $BASE/api/speedtest/run \
+  -H "Content-Type: application/json" \
+  -d '{"clients":["linux","macos"],"test_group_name":"Speedtest","iterations":1}'
+
+# Collect SNMP manually
+curl -X POST $BASE/api/snmp/collect \
+  -H "Content-Type: application/json" \
+  -d '{"test_name":"manual_test","phase":"before"}'
+
+# Get live SNMP data
+curl "$BASE/api/snmp/live"
+
+# Check async test status
+curl $BASE/api/test/status/<test_id>
+
+# List all tests
+curl $BASE/api/test/list
+
+# List results
+curl $BASE/api/results
+
+# Get result files
+curl $BASE/api/results/<result_id>
+
+# Get latency analysis (JSON)
+curl $BASE/api/results/<result_id>/latency
+
+# Get latency analysis + generate Excel
+curl "$BASE/api/results/<result_id>/latency?generate_excel=true"
+
+# Calculate latency from SNMP files
+curl -X POST $BASE/api/latency/calculate \
+  -H "Content-Type: application/json" \
+  -d '{"results_dir":"Results/HSI021_ByteBlower_20260410/DS_Classic_Only"}'
+
+# Get SNMP analysis with deltas
+curl $BASE/api/results/<result_id>/snmp
+
+# Download result folder as ZIP
+curl -O -J $BASE/api/results/<result_id>/download
+
+# Download individual file
+curl -O -J "$BASE/api/results/<result_id>/download/DS_Classic_Only/CMTS_Latency_Report.xlsx"
+
+# List ByteBlower flows
+curl $BASE/api/bb_flows
+
+# Get current config
+curl $BASE/api/config
+
+# Get CPE device IPs
+curl "$BASE/api/cmts/devices?cmts_host=apc01k1dccc&cm_mac=206a.9492.23b8"
 ```
 
 ### Running Tests

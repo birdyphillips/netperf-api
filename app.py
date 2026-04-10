@@ -1448,6 +1448,107 @@ def get_latency_analysis(result_id):
     return jsonify({"result_id": result_id, "service_flows": all_sf_data}), 200
 
 
+@app.route('/api/results/<result_id>/cmts-latency', methods=['GET'])
+def get_cmts_latency_analysis(result_id):
+    """
+    Get CMTS Kafka Downstream Latency Analysis
+    ---
+    tags:
+      - Results
+    parameters:
+      - in: path
+        name: result_id
+        required: true
+        type: string
+        description: Result UUID
+    responses:
+      200:
+        description: CMTS downstream latency analysis from Kafka telemetry
+        schema:
+          type: object
+          properties:
+            result_id:
+              type: string
+            service_flows:
+              type: array
+              items:
+                type: object
+      404:
+        description: Result not found or no CMTS latency data
+    """
+    if result_id not in result_registry:
+        return jsonify({"error": "Result not found"}), 404
+
+    result_path = result_registry[result_id]
+    if not os.path.exists(result_path):
+        return jsonify({"error": "Result folder not found"}), 404
+
+    # Find CMTS_Latency_Report Excel files
+    cmts_reports = []
+    for root, dirs, files in os.walk(result_path):
+        for f in files:
+            if f.startswith("CMTS_Latency_Report") and f.endswith(".xlsx"):
+                cmts_reports.append(os.path.join(root, f))
+
+    if not cmts_reports:
+        return jsonify({"error": "No CMTS latency reports found. CMTS Kafka collection may not have run."}), 404
+
+    all_data = []
+    for report_path in cmts_reports:
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(report_path, data_only=True)
+            subdir = os.path.relpath(os.path.dirname(report_path), result_path)
+
+            # Parse Summary sheet
+            if "Summary" in wb.sheetnames:
+                ws = wb["Summary"]
+                headers = [cell.value for cell in ws[3]]
+                for row in ws.iter_rows(min_row=4, values_only=True):
+                    if not row[0] or not str(row[0]).startswith("sfIndex"):
+                        continue
+                    sf_data = {"directory": subdir, "report_file": os.path.basename(report_path)}
+                    for i, header in enumerate(headers):
+                        if header and i < len(row):
+                            sf_data[header] = row[i]
+                    all_data.append(sf_data)
+
+            # Parse per-sfIndex sheets for bin details
+            for sheet_name in wb.sheetnames:
+                if not sheet_name.startswith("sfIndex_"):
+                    continue
+                ws = wb[sheet_name]
+                bins = []
+                for row in ws.iter_rows(min_row=4, max_row=19, values_only=True):
+                    if row[0] and isinstance(row[0], (int, float)):
+                        bins.append({
+                            "bin": int(row[0]),
+                            "lower_ms": row[1],
+                            "upper_ms": row[2],
+                            "avg_ms": row[3],
+                            "delta": row[4],
+                            "cumulative": row[5],
+                            "cumulative_pct": row[6],
+                            "bin_pct": row[7],
+                        })
+                # Attach bins to matching sf_data
+                sf_index = sheet_name.replace("sfIndex_", "")
+                for sf in all_data:
+                    if sf.get("SF Index") == f"sfIndex {sf_index}" and sf.get("directory") == subdir:
+                        sf["bins"] = bins
+                        break
+
+            wb.close()
+        except Exception as e:
+            logger.error(f"Failed to parse CMTS report {report_path}: {e}")
+            continue
+
+    if not all_data:
+        return jsonify({"error": "No data found in CMTS latency reports"}), 404
+
+    return jsonify({"result_id": result_id, "source": "cmts_kafka", "service_flows": all_data}), 200
+
+
 @app.route('/api/latency/calculate', methods=['POST'])
 def calculate_latency():
     """
