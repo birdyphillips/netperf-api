@@ -9,9 +9,8 @@ from byteblower_logic import ByteBlowerLogic
 from packetstorm_logic import PacketStormLogic
 from iperf3_logic import IPerf3Logic
 from speedtest_logic import SpeedTestLogic
-from snmp_collector import collect_snmp_data
+from snmp_collector import collect_snmp_data, generate_latency_report, find_snmp_files, parse_latency_bins, compute_deltas, calc_percentile, calc_percentile_avg, calc_weighted_avg, compute_throughput_and_loss, BIN_EDGES_MS, NUM_BINS
 from cmts_modem_info import collect_cmts_data
-from latency_calculator import generate_latency_report, find_snmp_files, parse_latency_bins, compute_deltas, calc_percentile, calc_percentile_avg, calc_weighted_avg, BIN_EDGES_MS, NUM_BINS
 from logger import Logger
 import shutil
 import tempfile
@@ -1348,6 +1347,7 @@ def get_latency_analysis(result_id):
         if not all_deltas:
             continue
 
+        tp_stats = compute_throughput_and_loss(before_file, after_file)
         subdir = os.path.relpath(root, result_path)
 
         for sfid, sf_data in sorted(all_deltas.items()):
@@ -1371,6 +1371,7 @@ def get_latency_analysis(result_id):
                     "cumulative_pct": round(cumulative / total * 100, 2) if total else 0,
                 })
 
+            tp = tp_stats.get(sfid, {})
             all_sf_data.append({
                 "directory": subdir,
                 "sfid": sfid,
@@ -1383,6 +1384,9 @@ def get_latency_analysis(result_id):
                 "p99_avg_ms": round(calc_percentile_avg(deltas, 0.99), 4),
                 "p999_avg_ms": round(calc_percentile_avg(deltas, 0.999), 4),
                 "peak_bin": f"{BIN_EDGES_MS[peak_idx]}-{BIN_EDGES_MS[peak_idx+1]} ms",
+                "throughput_mbps": round(tp.get("throughput_mbps", 0), 4),
+                "lost_packets": tp.get("lost_packets", 0),
+                "loss_pct": round(tp.get("loss_pct", 0), 4),
                 "bins": bins_detail,
             })
 
@@ -1471,10 +1475,13 @@ def calculate_latency():
     if not all_deltas:
         return jsonify({"error": "No latency data (all deltas zero)"}), 404
 
+    tp_stats = compute_throughput_and_loss(before_file, after_file)
+
     sf_results = []
     for sfid, sf_data in sorted(all_deltas.items()):
         deltas = sf_data["deltas"]
         total = sum(deltas)
+        tp = tp_stats.get(sfid, {})
         sf_results.append({
             "sfid": sfid,
             "total_packets": total,
@@ -1486,6 +1493,9 @@ def calculate_latency():
             "p99_avg_ms": round(calc_percentile_avg(deltas, 0.99), 4),
             "p999_avg_ms": round(calc_percentile_avg(deltas, 0.999), 4),
             "peak_bin": f"{BIN_EDGES_MS[deltas.index(max(deltas))]}-{BIN_EDGES_MS[deltas.index(max(deltas))+1]} ms",
+            "throughput_mbps": round(tp.get("throughput_mbps", 0), 4),
+            "lost_packets": tp.get("lost_packets", 0),
+            "loss_pct": round(tp.get("loss_pct", 0), 4),
         })
 
     response = {"service_flows": sf_results, "before_file": before_file, "after_file": after_file}

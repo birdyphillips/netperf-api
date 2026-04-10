@@ -104,78 +104,85 @@ def ssh_cmts_collector(username, jumpserver, cmts_host, cmts_password, cm_mac, c
         output_lines.append(f"Cable Modem MAC: {cm_mac}")
         output_lines.append("="*80)
         
-        # Execute commands via jumpserver using interactive shell
+        import time
+        import re
+        
+        # Open single interactive shell session
+        shell = ssh.invoke_shell(width=200)
+        time.sleep(1)
+        if shell.recv_ready():
+            shell.recv(4096)  # clear jumpserver banner
+        
+        # SSH from jumpserver to CMTS
+        shell.send(f"ssh -o StrictHostKeyChecking=no {username}@{cmts_host}\n")
+        
+        # Wait for password prompt (comes after welcome banner)
+        output_buffer = ''
+        for _ in range(20):
+            time.sleep(1)
+            if shell.recv_ready():
+                output_buffer += shell.recv(4096).decode()
+            if 'password:' in output_buffer.lower():
+                break
+        
+        # Send password
+        if 'password' in output_buffer.lower():
+            shell.send(cmts_password + '\n')
+        
+        # Wait for CMTS prompt
+        prompt_buffer = ''
+        for _ in range(15):
+            time.sleep(1)
+            if shell.recv_ready():
+                prompt_buffer += shell.recv(4096).decode()
+            if '>' in prompt_buffer or '#' in prompt_buffer:
+                break
+        
+        logger.info(f"CMTS session established on {cmts_host}")
+        
+        # Execute all commands in the same session
         for i, cmd in enumerate(commands):
             logger.info(f"Executing command {i+1}/{len(commands)}: {cmd}")
             print(f"\nExecuting: {cmd}")
             
-            # Open interactive shell on jumpserver
-            shell = ssh.invoke_shell()
-            
-            # SSH from jumpserver to CMTS
-            shell.send(f"ssh -o StrictHostKeyChecking=no {username}@{cmts_host}\n")
-            
-            # Wait for password prompt
-            import time
-            time.sleep(1)
-            output_buffer = shell.recv(4096).decode()
-            
-            # Send password if prompted
-            if 'password' in output_buffer.lower():
-                shell.send(cmts_password + '\n')
-                time.sleep(1)
-                output_buffer += shell.recv(4096).decode()
-            
-            # Execute command
             shell.send(cmd + '\n')
-            time.sleep(2)  # Wait for command to complete
+            time.sleep(3)
             
             # Collect output and handle --More-- pagination
             output = ''
-            max_iterations = 50  # Prevent infinite loops
-            iteration = 0
-            
-            while iteration < max_iterations:
+            for _ in range(50):
                 if shell.recv_ready():
                     chunk = shell.recv(4096).decode()
                     output += chunk
-                    
-                    # Check if --More-- prompt is present
-                    if '--More--' in chunk:
-                        shell.send(' ')  # Send space to continue
+                    if '--More--' in chunk or '(END)' in chunk:
+                        shell.send(' ')
                         time.sleep(0.5)
                     else:
-                        time.sleep(0.1)
+                        time.sleep(0.2)
                 else:
-                    # No more data available
-                    time.sleep(0.2)
+                    time.sleep(0.3)
                     if not shell.recv_ready():
                         break
-                
-                iteration += 1
-            
-            # Exit CMTS session
-            shell.send('exit\n')
-            time.sleep(0.5)
-            
-            shell.close()
-            
-            error = ''
             
             results[labels[i]] = {
                 'output': output,
-                'error': error if error else None
+                'error': None
             }
             
-            # Extract IPv6 on first command (IP info)
-            if i == 0:
-                import re
-                # Match full IPv6 address (at least 4 groups with colons)
-                ipv6_match = re.search(r'([0-9a-f]{1,4}:[0-9a-f]{1,4}:[0-9a-f:]+:[0-9a-f:]+)', output, re.IGNORECASE)
+            # Extract IPv6 from any command output
+            if not cm_ipv6:
+                ipv6_match = re.search(r'((?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:)*::[0-9a-f:]*[0-9a-f])', output, re.IGNORECASE)
                 if ipv6_match:
-                    cm_ipv6 = ipv6_match.group(1)
-                    logger.info(f"Extracted Cable Modem IPv6: {cm_ipv6}")
-                    print(f"\nCable Modem IPv6: {cm_ipv6}")
+                    candidate = ipv6_match.group(1)
+                    if not candidate.lower().startswith('fe80') and candidate != '::1':
+                        cm_ipv6 = candidate
+                        logger.info(f"Extracted Cable Modem IPv6: {cm_ipv6}")
+                        print(f"\nCable Modem IPv6: {cm_ipv6}")
+        
+        # Exit CMTS and close shell
+        shell.send('exit\n')
+        time.sleep(0.5)
+        shell.close()
             
         ssh.close()
         

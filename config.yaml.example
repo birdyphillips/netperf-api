@@ -136,6 +136,14 @@ cmts_hosts:
   - name: "icmts01.example.com"
     type: "icmts"
 
+# Kafka / CMTS Telemetry Configuration
+# Used by cmts_collector.py for real-time downstream latency metrics
+kafka:
+  # Kafka broker address (Harmonic vCMTS telemetry stream)
+  broker: "65.185.232.139:11203"
+  # Kafka topic (format: cmts_metrics_<cluster_name>)
+  topic: "cmts_metrics_apc01k1dccc"
+
 # SSH Configuration
 ssh:
   # Path to SSH private key (supports ~ expansion)

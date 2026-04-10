@@ -3,6 +3,7 @@ import paramiko
 import sys
 import os
 import re
+import glob
 import logging
 from datetime import datetime
 from config_loader import config
@@ -16,6 +17,23 @@ try:
     EXCEL_AVAILABLE = True
 except ImportError:
     EXCEL_AVAILABLE = False
+
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
+
+# ---------------------------------------------------------------------------
+# Latency bin constants
+# ---------------------------------------------------------------------------
+BIN_EDGES_MS = [
+    0, 0.05, 0.10, 0.25, 0.50, 1.00, 2.00, 5.00, 10.00,
+    20.00, 30.00, 40.00, 50.00, 100.00, 150.00, 200.00, 500.00,
+]
+NUM_BINS = len(BIN_EDGES_MS) - 1
 
 def parse_snmp_data(file_path):
     """Parse SNMP data from text file and return structured data"""
@@ -211,11 +229,6 @@ def ssh_snmp_collector(username, jumpserver, target_ip, output_file=None, snmp_c
         modem_output = stdout.read().decode()
         modem_error = stderr.read().decode()
         
-        # Check for SNMP timeout on first command to fail fast
-        if 'Timeout: No Response from' in modem_output or 'Timeout: No Response from' in modem_error:
-            ssh.close()
-            raise TimeoutError(f"SNMP timeout: No response from {target_ip}")
-        
         output_lines.append(f"\nCurrent Modem Information")
         output_lines.append("="*50)
         if modem_output:
@@ -232,10 +245,6 @@ def ssh_snmp_collector(username, jumpserver, target_ip, output_file=None, snmp_c
             
             output = stdout.read().decode()
             error = stderr.read().decode()
-            
-            # Check for SNMP timeout
-            if 'Timeout: No Response from' in output or 'Timeout: No Response from' in error:
-                print(f"SNMP timeout on {labels[i]} for {target_ip}")
             
             results[labels[i]] = {
                 'output': output,
@@ -287,7 +296,7 @@ def collect_snmp_data(target_ip, test_name, phase, output_dir):
     
     # DEPRECATED: Combined SNMP Excel export — replaced by latency_calculator.py
     # Latency bin reports are now generated via generate_latency_report() in the
-    # orchestrator/API after all iterations complete.
+    # orchestrator after all iterations complete.
     # To re-enable, uncomment the block below:
     # if phase == "after":
     #     try:
@@ -296,6 +305,412 @@ def collect_snmp_data(target_ip, test_name, phase, output_dir):
     #         print(f"Excel export failed: {e}")
     
     return result
+
+
+# ---------------------------------------------------------------------------
+# Latency bin parsing & calculation (moved from latency_calculator.py)
+# ---------------------------------------------------------------------------
+
+def parse_snmp_timestamp(filepath):
+    """Extract collection timestamp from SNMP file header."""
+    with open(filepath, "r") as f:
+        for line in f:
+            m = re.match(r"SNMP Collection - (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
+            if m:
+                return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+    return None
+
+
+def parse_flow_stats(filepath):
+    """Parse Flow Stats Table for packets, octets, and dropped packets per SFID."""
+    with open(filepath, "r") as f:
+        content = f.read()
+    match = re.search(r"Flow Stats Table.*?\n=+\n(.*?)(?:\n\n|\Z)", content, re.DOTALL)
+    if not match:
+        return {}
+    section = match.group(1)
+    stats = {}
+    sub_map = {"1": "packets", "2": "octets", "8": "dropped"}
+    for line in section.splitlines():
+        m = re.search(r"\.4\.1\.(\d+)\.2\.(\d+)\s*=\s*(?:Counter64|Counter32):\s*(\d+)", line)
+        if m:
+            sub_oid, sfid_str, val_str = m.group(1), m.group(2), m.group(3)
+            if sub_oid in sub_map:
+                sfid = int(sfid_str)
+                stats.setdefault(sfid, {"packets": 0, "octets": 0, "dropped": 0})
+                stats[sfid][sub_map[sub_oid]] = int(val_str)
+    return stats
+
+
+DEFAULT_DURATION = {"byteblower": 60, "iperf3": 30}
+
+
+def _infer_duration(filepath):
+    base = os.path.basename(filepath).lower()
+    for key, dur in DEFAULT_DURATION.items():
+        if key in base:
+            return dur
+    return None
+
+
+def compute_throughput_and_loss(before_file, after_file, duration_s=None):
+    """Compute per-SFID throughput (Mbps) and packet loss from flow stats deltas."""
+    fs_before = parse_flow_stats(before_file)
+    fs_after = parse_flow_stats(after_file)
+    if not fs_before or not fs_after:
+        return {}
+    if duration_s is None:
+        duration_s = _infer_duration(before_file)
+    if duration_s is None:
+        ts_before = parse_snmp_timestamp(before_file)
+        ts_after = parse_snmp_timestamp(after_file)
+        if ts_before and ts_after:
+            duration_s = (ts_after - ts_before).total_seconds()
+    if not duration_s or duration_s <= 0:
+        return {}
+    results = {}
+    for sfid in sorted(set(fs_before) & set(fs_after)):
+        d_octets = max(fs_after[sfid]["octets"] - fs_before[sfid]["octets"], 0)
+        d_packets = max(fs_after[sfid]["packets"] - fs_before[sfid]["packets"], 0)
+        d_dropped = max(fs_after[sfid]["dropped"] - fs_before[sfid]["dropped"], 0)
+        if d_packets == 0 and d_octets == 0:
+            continue
+        total_pkts = d_packets + d_dropped
+        results[sfid] = {
+            "throughput_mbps": (d_octets * 8) / (duration_s * 1_000_000),
+            "lost_packets": d_dropped,
+            "total_packets": total_pkts,
+            "loss_pct": (d_dropped / total_pkts * 100) if total_pkts > 0 else 0.0,
+        }
+    return results
+
+
+def parse_latency_bins(filepath):
+    """Parse Latency Stats Table from an SNMP text file."""
+    with open(filepath, "r") as f:
+        content = f.read()
+    match = re.search(r"Latency Stats Table\n=+\n(.*?)(?:\n\n|\Z)", content, re.DOTALL)
+    if not match:
+        return {}
+    section = match.group(1)
+    bins = {}
+    for line in section.splitlines():
+        m = re.search(r"\.29\.2\.1\.(\d+)\.2\.(\d+)\s*=\s*(?:Counter64|Gauge32):\s*(\d+)", line)
+        if m:
+            sub_oid = int(m.group(1))
+            sfid = int(m.group(2))
+            value = int(m.group(3))
+            bins.setdefault(sfid, {})[sub_oid] = value
+    return bins
+
+
+def compute_deltas(before_bins, after_bins):
+    """Compute per-service-flow bin deltas (after - before)."""
+    results = {}
+    all_sfids = set(before_bins) & set(after_bins)
+    for sfid in sorted(all_sfids):
+        before_vals, after_vals, deltas = [], [], []
+        for sub in range(2, 2 + NUM_BINS):
+            bv = before_bins[sfid].get(sub, 0)
+            av = after_bins[sfid].get(sub, 0)
+            before_vals.append(bv)
+            after_vals.append(av)
+            deltas.append(max(av - bv, 0))
+        if sum(deltas) > 0:
+            results[sfid] = {"before": before_vals, "after": after_vals, "deltas": deltas}
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Percentile & average calculations
+# ---------------------------------------------------------------------------
+
+def calc_percentile(deltas, percentile):
+    """Linear interpolation percentile from bin deltas."""
+    total = sum(deltas)
+    if total == 0:
+        return 0.0
+    target = total * percentile
+    cumulative = 0
+    for i, count in enumerate(deltas):
+        cumulative += count
+        if cumulative >= target:
+            prev_cum = cumulative - count
+            bin_low = BIN_EDGES_MS[i]
+            bin_high = BIN_EDGES_MS[i + 1]
+            denom = count if count > 0 else 1
+            return bin_low + ((target - prev_cum) / denom) * (bin_high - bin_low)
+    return BIN_EDGES_MS[-1]
+
+
+def calc_weighted_avg(deltas):
+    """Weighted average latency: sum(delta_i x bin_avg_i) / total."""
+    total = sum(deltas)
+    if total == 0:
+        return 0.0
+    weighted = sum(
+        deltas[i] * (BIN_EDGES_MS[i] + BIN_EDGES_MS[i + 1]) / 2
+        for i in range(NUM_BINS)
+    )
+    return weighted / total
+
+
+def calc_percentile_avg(deltas, percentile):
+    """AVG method: return the bin midpoint of the first bin where
+    cumulative count >= percentile target."""
+    total = sum(deltas)
+    if total == 0:
+        return 0.0
+    target = total * percentile
+    cumulative = 0
+    for i, count in enumerate(deltas):
+        cumulative += count
+        if cumulative >= target:
+            return (BIN_EDGES_MS[i] + BIN_EDGES_MS[i + 1]) / 2
+    return (BIN_EDGES_MS[-2] + BIN_EDGES_MS[-1]) / 2
+
+
+# ---------------------------------------------------------------------------
+# Excel report generation
+# ---------------------------------------------------------------------------
+
+if OPENPYXL_AVAILABLE:
+    _HEADER_FONT = Font(bold=True, size=11, color="FFFFFF")
+    _HEADER_FILL = PatternFill("solid", fgColor="4472C4")
+    _CALC_FILL = PatternFill("solid", fgColor="D9E2F3")
+    _RESULT_FILL = PatternFill("solid", fgColor="C6EFCE")
+    _INPUT_FILL = PatternFill("solid", fgColor="FFF2CC")
+    _THIN_BORDER = Border(
+        left=Side(style="thin"), right=Side(style="thin"),
+        top=Side(style="thin"), bottom=Side(style="thin"),
+    )
+    _CENTER = Alignment(horizontal="center", vertical="center")
+    _BOLD = Font(bold=True, size=11)
+
+
+def _styled_cell(ws, row, col, value, font=None, fill=None, fmt=None):
+    cell = ws.cell(row=row, column=col, value=value)
+    cell.alignment = _CENTER
+    cell.border = _THIN_BORDER
+    if font:
+        cell.font = font
+    if fill:
+        cell.fill = fill
+    if fmt:
+        cell.number_format = fmt
+    return cell
+
+
+def write_sf_sheet(wb, sheet_name, sf_data, tp_data=None):
+    """Write one worksheet for a service flow's latency bin data."""
+    deltas = sf_data["deltas"]
+    before = sf_data["before"]
+    after = sf_data["after"]
+    ws = wb.create_sheet(title=sheet_name)
+
+    ws.merge_cells("A1:J1")
+    ws["A1"] = f"CMTS DS LATENCY \u2014 {sheet_name}"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A1"].alignment = _CENTER
+
+    if tp_data:
+        _styled_cell(ws, 2, 1, "Throughput (Mbps):", font=_BOLD)
+        _styled_cell(ws, 2, 2, round(tp_data["throughput_mbps"], 4), fill=_RESULT_FILL, fmt="0.0000")
+        _styled_cell(ws, 2, 4, "Packet Loss:", font=_BOLD)
+        _styled_cell(ws, 2, 5, tp_data["lost_packets"], fill=_RESULT_FILL)
+        _styled_cell(ws, 2, 6, f"{tp_data['loss_pct']:.4f}%", fill=_RESULT_FILL)
+
+    headers = [
+        "BIN", "LOWER (ms)", "UPPER (ms)", "AVG (ms)",
+        "START COUNT", "END COUNT", "DELTA",
+        "CUMULATIVE", "CUMULATIVE %", "BIN %",
+    ]
+    for col, h in enumerate(headers, 1):
+        _styled_cell(ws, 3, col, h, font=_HEADER_FONT, fill=_HEADER_FILL)
+
+    total = sum(deltas)
+    cumulative = 0
+
+    for i in range(NUM_BINS):
+        row = 4 + i
+        low = BIN_EDGES_MS[i]
+        high = BIN_EDGES_MS[i + 1]
+        avg = (low + high) / 2
+        delta = deltas[i]
+        cumulative += delta
+        cum_pct = (cumulative / total * 100) if total else 0
+        bin_pct = (delta / total * 100) if total else 0
+
+        _styled_cell(ws, row, 1, i + 1)
+        _styled_cell(ws, row, 2, low, fmt="0.00")
+        _styled_cell(ws, row, 3, high if i < 15 else "200.00+", fmt="0.00")
+        _styled_cell(ws, row, 4, avg, fill=_CALC_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 5, before[i], fill=_INPUT_FILL)
+        _styled_cell(ws, row, 6, after[i], fill=_INPUT_FILL)
+        _styled_cell(ws, row, 7, delta, fill=_CALC_FILL)
+        _styled_cell(ws, row, 8, cumulative, fill=_CALC_FILL)
+        _styled_cell(ws, row, 9, cum_pct, fill=_CALC_FILL, fmt="0.00")
+        _styled_cell(ws, row, 10, bin_pct, fill=_CALC_FILL, fmt="0.00")
+
+    total_row = 4 + NUM_BINS + 1
+    _styled_cell(ws, total_row, 1, "TOTAL", font=_BOLD)
+    _styled_cell(ws, total_row, 5, sum(before), font=_BOLD, fill=_INPUT_FILL)
+    _styled_cell(ws, total_row, 6, sum(after), font=_BOLD, fill=_INPUT_FILL)
+    _styled_cell(ws, total_row, 7, total, font=_BOLD, fill=_CALC_FILL)
+    _styled_cell(ws, total_row, 9, 100.00 if total else 0, font=_BOLD, fill=_CALC_FILL, fmt="0.00")
+
+    pct_row = total_row + 2
+    ws.merge_cells(f"A{pct_row}:J{pct_row}")
+    ws.cell(row=pct_row, column=1, value="PERCENTILE RESULTS (LINEAR INTERPOLATION)").font = Font(bold=True, size=12)
+
+    for label, pct in [("P50", 0.50), ("P99", 0.99), ("P99.9", 0.999)]:
+        pct_row += 1
+        _styled_cell(ws, pct_row, 1, f"{label} TARGET", font=_BOLD)
+        _styled_cell(ws, pct_row, 2, round(total * pct, 2), fill=_RESULT_FILL, fmt="0.00")
+        _styled_cell(ws, pct_row, 3, f"{label} (ms)", font=_BOLD)
+        _styled_cell(ws, pct_row, 4, round(calc_percentile(deltas, pct), 4), fill=_RESULT_FILL, fmt="0.0000")
+
+    legend_row = pct_row + 2
+    ws.cell(row=legend_row, column=1, value="FORMULA:").font = _BOLD
+    ws.merge_cells(f"B{legend_row}:J{legend_row}")
+    ws.cell(row=legend_row, column=2, value="P = BIN_LOW + ((TARGET \u2212 PREV_CUMULATIVE) / BIN_COUNT) \u00d7 (BIN_HIGH \u2212 BIN_LOW)").font = Font(italic=True, size=10)
+
+    avg_row = legend_row + 2
+    ws.merge_cells(f"A{avg_row}:J{avg_row}")
+    ws.cell(row=avg_row, column=1, value="PERCENTILE RESULTS (AVG METHOD)").font = Font(bold=True, size=12)
+
+    for label, pct in [("P50", 0.50), ("P99", 0.99), ("P99.9", 0.999)]:
+        avg_row += 1
+        _styled_cell(ws, avg_row, 1, f"{label} TARGET", font=_BOLD)
+        _styled_cell(ws, avg_row, 2, round(total * pct, 2), fill=_RESULT_FILL, fmt="0.00")
+        _styled_cell(ws, avg_row, 3, f"{label} AVG (ms)", font=_BOLD)
+        _styled_cell(ws, avg_row, 4, round(calc_percentile_avg(deltas, pct), 4), fill=_RESULT_FILL, fmt="0.0000")
+
+    legend_row2 = avg_row + 2
+    ws.cell(row=legend_row2, column=1, value="FORMULA:").font = _BOLD
+    ws.merge_cells(f"B{legend_row2}:J{legend_row2}")
+    ws.cell(row=legend_row2, column=2, value="P = AVG (col D) of first bin where cumulative count >= percentile target").font = Font(italic=True, size=10)
+
+    for i, w in enumerate([8, 14, 14, 14, 16, 16, 14, 16, 16, 12], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+
+def write_summary_sheet(wb, all_results, tp_stats=None):
+    """Write a summary sheet comparing all service flows."""
+    ws = wb.create_sheet(title="Summary")
+    ws.sheet_properties.tabColor = "4472C4"
+
+    ws.merge_cells("A1:L1")
+    ws["A1"] = "LATENCY PERCENTILE SUMMARY"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A1"].alignment = _CENTER
+
+    headers = [
+        "Service Flow", "Total Pkts", "Weighted Avg (ms)",
+        "P50 (ms)", "P99 (ms)", "P99.9 (ms)",
+        "P50 AVG (ms)", "P99 AVG (ms)", "P99.9 AVG (ms)",
+        "Peak Bin", "Throughput (Mbps)", "Pkt Loss %",
+    ]
+    for col, h in enumerate(headers, 1):
+        _styled_cell(ws, 3, col, h, font=_HEADER_FONT, fill=_HEADER_FILL)
+
+    if not tp_stats:
+        tp_stats = {}
+
+    row = 4
+    for sfid, sf_data in sorted(all_results.items()):
+        deltas = sf_data["deltas"]
+        total = sum(deltas)
+        w_avg = calc_weighted_avg(deltas)
+        p50 = calc_percentile(deltas, 0.50)
+        p99 = calc_percentile(deltas, 0.99)
+        p999 = calc_percentile(deltas, 0.999)
+        p50a = calc_percentile_avg(deltas, 0.50)
+        p99a = calc_percentile_avg(deltas, 0.99)
+        p999a = calc_percentile_avg(deltas, 0.999)
+        peak_idx = deltas.index(max(deltas))
+        peak_label = f"{BIN_EDGES_MS[peak_idx]}-{BIN_EDGES_MS[peak_idx+1]} ms"
+
+        _styled_cell(ws, row, 1, f"SFID {sfid}")
+        _styled_cell(ws, row, 2, total, fill=_CALC_FILL)
+        _styled_cell(ws, row, 3, round(w_avg, 4), fill=_RESULT_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 4, round(p50, 4), fill=_RESULT_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 5, round(p99, 4), fill=_RESULT_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 6, round(p999, 4), fill=_RESULT_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 7, round(p50a, 4), fill=_RESULT_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 8, round(p99a, 4), fill=_RESULT_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 9, round(p999a, 4), fill=_RESULT_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 10, peak_label, fill=_CALC_FILL)
+        tp = tp_stats.get(sfid)
+        _styled_cell(ws, row, 11, round(tp["throughput_mbps"], 4) if tp else "N/A", fill=_CALC_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 12, round(tp["loss_pct"], 4) if tp else "N/A", fill=_CALC_FILL, fmt="0.0000")
+        row += 1
+
+    for i, w in enumerate([16, 14, 18, 14, 14, 14, 16, 16, 16, 20, 18, 14], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+
+def generate_latency_report(before_file, after_file, output_file=None):
+    """Main entry: parse SNMP files, compute deltas, write Excel report."""
+    if not OPENPYXL_AVAILABLE:
+        print("WARNING: openpyxl not available \u2014 skipping latency report")
+        return None
+
+    before_bins = parse_latency_bins(before_file)
+    after_bins = parse_latency_bins(after_file)
+
+    if not before_bins or not after_bins:
+        print("WARNING: No latency stats found in one or both SNMP files.")
+        return None
+
+    all_deltas = compute_deltas(before_bins, after_bins)
+
+    if not all_deltas:
+        print("WARNING: All latency bin deltas are zero \u2014 no traffic detected.")
+        return None
+
+    tp_stats = compute_throughput_and_loss(before_file, after_file)
+
+    if output_file is None:
+        output_dir = os.path.dirname(after_file) or "."
+        dir_name = os.path.basename(os.path.abspath(output_dir))
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = os.path.join(output_dir, f"Latency_Bin_Report_{dir_name}_{timestamp}.xlsx")
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    write_summary_sheet(wb, all_deltas, tp_stats)
+
+    for sfid, sf_data in sorted(all_deltas.items()):
+        write_sf_sheet(wb, f"SFID_{sfid}", sf_data, tp_stats.get(sfid))
+
+    wb.save(output_file)
+    print(f"Latency report saved: {output_file}")
+
+    print("\n--- Latency Summary ---")
+    for sfid, sf_data in sorted(all_deltas.items()):
+        deltas = sf_data["deltas"]
+        total = sum(deltas)
+        avg = calc_weighted_avg(deltas)
+        p50 = calc_percentile(deltas, 0.50)
+        p99 = calc_percentile(deltas, 0.99)
+        p999 = calc_percentile(deltas, 0.999)
+        tp = tp_stats.get(sfid)
+        tp_str = f"  Throughput={tp['throughput_mbps']:.4f}Mbps  Loss={tp['loss_pct']:.4f}%" if tp else ""
+        print(f"  SFID {sfid}: {total} pkts | AVG={avg:.4f}ms  P50={p50:.4f}ms  P99={p99:.4f}ms  P99.9={p999:.4f}ms{tp_str}")
+
+    return output_file
+
+
+def find_snmp_files(results_dir):
+    """Auto-discover before/after SNMP .txt files in a results directory."""
+    before_files = sorted(glob.glob(os.path.join(results_dir, "**", "*SNMP_before_*.txt"), recursive=True))
+    after_files = sorted(glob.glob(os.path.join(results_dir, "**", "*SNMP_after_*.txt"), recursive=True))
+    if not before_files or not after_files:
+        return None, None
+    return before_files[0], after_files[0]
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

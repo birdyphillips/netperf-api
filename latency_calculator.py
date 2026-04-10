@@ -29,10 +29,119 @@ NUM_BINS = len(BIN_EDGES_MS) - 1  # 16
 # sub_oid 2..18 = Counter64 bin packet counts (bins 1-17, we use 2-18 → 17 values, first 16 are our bins)
 LATENCY_OID_PREFIX = "enterprises.4491.2.1.21.1.29.2.1"
 
+# Flow Stats Table OID sub-indices (under enterprises.4491.2.1.21.1.4.1)
+# .1.2.{sfid} = packets, .2.2.{sfid} = octets, .8.2.{sfid} = dropped packets (Counter64)
+FLOW_STATS_OID_PREFIX = "enterprises.4491.2.1.21.1.4.1"
+
 
 # ---------------------------------------------------------------------------
 # Parsing
 # ---------------------------------------------------------------------------
+
+def parse_snmp_timestamp(filepath):
+    """Extract collection timestamp from SNMP file header."""
+    with open(filepath, "r") as f:
+        for line in f:
+            m = re.match(r"SNMP Collection - (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
+            if m:
+                return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+    return None
+
+
+def parse_flow_stats(filepath):
+    """Parse Flow Stats Table for packets, octets, and dropped packets per SFID.
+
+    Returns dict: {sfid: {"packets": int, "octets": int, "dropped": int}}
+    """
+    with open(filepath, "r") as f:
+        content = f.read()
+
+    match = re.search(
+        r"Flow Stats Table.*?\n=+\n(.*?)(?:\n\n|\Z)", content, re.DOTALL
+    )
+    if not match:
+        return {}
+
+    section = match.group(1)
+    stats = {}  # {sfid: {"packets": v, "octets": v, "dropped": v}}
+    # Map sub-OID to key: .1 = packets, .2 = octets, .8 = dropped
+    sub_map = {"1": "packets", "2": "octets", "8": "dropped"}
+
+    for line in section.splitlines():
+        m = re.search(
+            r"\.4\.1\.(\d+)\.2\.(\d+)\s*=\s*(?:Counter64|Counter32):\s*(\d+)",
+            line,
+        )
+        if m:
+            sub_oid, sfid_str, val_str = m.group(1), m.group(2), m.group(3)
+            if sub_oid in sub_map:
+                sfid = int(sfid_str)
+                stats.setdefault(sfid, {"packets": 0, "octets": 0, "dropped": 0})
+                stats[sfid][sub_map[sub_oid]] = int(val_str)
+
+    return stats
+
+
+# Default test durations by tool (used for throughput calculation instead of
+# SNMP poll interval, which includes idle time before/after traffic).
+DEFAULT_DURATION = {"byteblower": 60, "iperf3": 30}
+
+
+def _infer_duration(filepath):
+    """Infer active traffic duration from SNMP filename convention.
+
+    Filenames start with 'ByteBlower_' or 'iPerf3_'.
+    Falls back to None if unrecognised.
+    """
+    base = os.path.basename(filepath).lower()
+    for key, dur in DEFAULT_DURATION.items():
+        if key in base:
+            return dur
+    return None
+
+
+def compute_throughput_and_loss(before_file, after_file, duration_s=None):
+    """Compute per-SFID throughput (Mbps) and packet loss from flow stats deltas.
+
+    *duration_s* overrides the automatic duration detection.  When None the
+    duration is inferred from the filename (ByteBlower → 60 s, iPerf3 → 30 s)
+    and falls back to the SNMP poll interval.
+
+    Returns dict: {sfid: {"throughput_mbps": float, "lost_packets": int,
+                          "total_packets": int, "loss_pct": float}}
+    """
+    fs_before = parse_flow_stats(before_file)
+    fs_after = parse_flow_stats(after_file)
+
+    if not fs_before or not fs_after:
+        return {}
+
+    if duration_s is None:
+        duration_s = _infer_duration(before_file)
+    if duration_s is None:
+        ts_before = parse_snmp_timestamp(before_file)
+        ts_after = parse_snmp_timestamp(after_file)
+        if ts_before and ts_after:
+            duration_s = (ts_after - ts_before).total_seconds()
+    if not duration_s or duration_s <= 0:
+        return {}
+
+    results = {}
+    for sfid in sorted(set(fs_before) & set(fs_after)):
+        d_octets = max(fs_after[sfid]["octets"] - fs_before[sfid]["octets"], 0)
+        d_packets = max(fs_after[sfid]["packets"] - fs_before[sfid]["packets"], 0)
+        d_dropped = max(fs_after[sfid]["dropped"] - fs_before[sfid]["dropped"], 0)
+        if d_packets == 0 and d_octets == 0:
+            continue
+        total_pkts = d_packets + d_dropped
+        results[sfid] = {
+            "throughput_mbps": (d_octets * 8) / (duration_s * 1_000_000),
+            "lost_packets": d_dropped,
+            "total_packets": total_pkts,
+            "loss_pct": (d_dropped / total_pkts * 100) if total_pkts > 0 else 0.0,
+        }
+    return results
+
 
 def parse_latency_bins(filepath):
     """Parse Latency Stats Table from an SNMP text file.
@@ -178,7 +287,7 @@ def _styled_cell(ws, row, col, value, font=None, fill=None, fmt=None):
 _INPUT_FILL = PatternFill("solid", fgColor="FFF2CC")
 
 
-def write_sf_sheet(wb, sheet_name, sf_data):
+def write_sf_sheet(wb, sheet_name, sf_data, tp_data=None):
     """Write one worksheet for a service flow's latency bin data."""
     deltas = sf_data["deltas"]
     before = sf_data["before"]
@@ -190,6 +299,14 @@ def write_sf_sheet(wb, sheet_name, sf_data):
     ws["A1"] = f"CMTS DS LATENCY — {sheet_name}"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A1"].alignment = _CENTER
+
+    # Throughput & Packet Loss row
+    if tp_data:
+        _styled_cell(ws, 2, 1, "Throughput (Mbps):", font=_BOLD)
+        _styled_cell(ws, 2, 2, round(tp_data["throughput_mbps"], 4), fill=_RESULT_FILL, fmt="0.0000")
+        _styled_cell(ws, 2, 4, "Packet Loss:", font=_BOLD)
+        _styled_cell(ws, 2, 5, tp_data["lost_packets"], fill=_RESULT_FILL)
+        _styled_cell(ws, 2, 6, f"{tp_data['loss_pct']:.4f}%", fill=_RESULT_FILL)
 
     # Headers (row 3)
     headers = [
@@ -283,12 +400,12 @@ def write_sf_sheet(wb, sheet_name, sf_data):
         ws.column_dimensions[get_column_letter(i)].width = w
 
 
-def write_summary_sheet(wb, all_results):
+def write_summary_sheet(wb, all_results, tp_stats=None):
     """Write a summary sheet comparing all service flows."""
     ws = wb.create_sheet(title="Summary")
     ws.sheet_properties.tabColor = "4472C4"
 
-    ws.merge_cells("A1:I1")
+    ws.merge_cells("A1:K1")
     ws["A1"] = "LATENCY PERCENTILE SUMMARY"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A1"].alignment = _CENTER
@@ -297,10 +414,13 @@ def write_summary_sheet(wb, all_results):
         "Service Flow", "Total Pkts",
         "P50 (ms)", "P99 (ms)", "P99.9 (ms)",
         "P50 AVG (ms)", "P99 AVG (ms)", "P99.9 AVG (ms)",
-        "Peak Bin",
+        "Peak Bin", "Throughput (Mbps)", "Pkt Loss %",
     ]
     for col, h in enumerate(headers, 1):
         _styled_cell(ws, 3, col, h, font=_HEADER_FONT, fill=_HEADER_FILL)
+
+    if not tp_stats:
+        tp_stats = {}
 
     row = 4
     for sfid, sf_data in sorted(all_results.items()):
@@ -324,9 +444,12 @@ def write_summary_sheet(wb, all_results):
         _styled_cell(ws, row, 7, round(p99a, 4), fill=_RESULT_FILL, fmt="0.0000")
         _styled_cell(ws, row, 8, round(p999a, 4), fill=_RESULT_FILL, fmt="0.0000")
         _styled_cell(ws, row, 9, peak_label, fill=_CALC_FILL)
+        tp = tp_stats.get(sfid)
+        _styled_cell(ws, row, 10, round(tp["throughput_mbps"], 4) if tp else "N/A", fill=_CALC_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 11, round(tp["loss_pct"], 4) if tp else "N/A", fill=_CALC_FILL, fmt="0.0000")
         row += 1
 
-    for i, w in enumerate([16, 14, 14, 14, 14, 16, 16, 16, 20], 1):
+    for i, w in enumerate([16, 14, 14, 14, 14, 16, 16, 16, 20, 18, 14], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
 
@@ -350,6 +473,8 @@ def generate_latency_report(before_file, after_file, output_file=None):
         print("WARNING: All latency bin deltas are zero — no traffic detected.")
         return None
 
+    tp_stats = compute_throughput_and_loss(before_file, after_file)
+
     if output_file is None:
         output_dir = os.path.dirname(after_file) or "."
         dir_name = os.path.basename(os.path.abspath(output_dir))
@@ -361,11 +486,11 @@ def generate_latency_report(before_file, after_file, output_file=None):
     wb.remove(wb.active)
 
     # Summary first
-    write_summary_sheet(wb, all_deltas)
+    write_summary_sheet(wb, all_deltas, tp_stats)
 
     # One sheet per service flow
     for sfid, sf_data in sorted(all_deltas.items()):
-        write_sf_sheet(wb, f"SFID_{sfid}", sf_data)
+        write_sf_sheet(wb, f"SFID_{sfid}", sf_data, tp_stats.get(sfid))
 
     wb.save(output_file)
     print(f"Latency report saved: {output_file}")
@@ -379,7 +504,9 @@ def generate_latency_report(before_file, after_file, output_file=None):
         p50 = calc_percentile(deltas, 0.50)
         p99 = calc_percentile(deltas, 0.99)
         p999 = calc_percentile(deltas, 0.999)
-        print(f"  SFID {sfid}: {total} pkts | AVG={avg:.4f}ms  P50={p50:.4f}ms  P99={p99:.4f}ms  P99.9={p999:.4f}ms")
+        tp = tp_stats.get(sfid)
+        tp_str = f"  Throughput={tp['throughput_mbps']:.4f}Mbps  Loss={tp['loss_pct']:.4f}%" if tp else ""
+        print(f"  SFID {sfid}: {total} pkts | AVG={avg:.4f}ms  P50={p50:.4f}ms  P99={p99:.4f}ms  P99.9={p999:.4f}ms{tp_str}")
 
     return output_file
 
