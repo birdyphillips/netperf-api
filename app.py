@@ -12,6 +12,12 @@ from speedtest_logic import SpeedTestLogic
 from snmp_collector import collect_snmp_data, generate_latency_report, find_snmp_files, parse_latency_bins, compute_deltas, calc_percentile, calc_percentile_avg, calc_weighted_avg, compute_throughput_and_loss, BIN_EDGES_MS, NUM_BINS
 from cmts_modem_info import collect_cmts_data
 from logger import Logger
+
+try:
+    from cmts_collector import CmtsCollector
+    CMTS_KAFKA_AVAILABLE = True
+except ImportError:
+    CMTS_KAFKA_AVAILABLE = False
 import shutil
 import tempfile
 import re
@@ -79,6 +85,41 @@ logger = Logger("FlaskAPI")
 modem_ipv6 = None
 running_tests = {}  # Store test status
 result_registry = {}  # Map result_id to folder path
+cmts_collectors = {}  # Active CMTS Kafka collectors by test_id
+
+
+def _start_cmts_collection(test_id, scenario, output_dir):
+    """Start CMTS Kafka collection for a test. Non-blocking."""
+    if not CMTS_KAFKA_AVAILABLE:
+        logger.warning("CMTS Kafka collector not available (kafka-python not installed)")
+        return None
+    try:
+        direction = "upstream" if scenario.lower().startswith("us") else "downstream"
+        collector = CmtsCollector(direction=direction)
+        collector.start()
+        cmts_collectors[test_id] = {"collector": collector, "output_dir": output_dir, "scenario": scenario}
+        return collector
+    except Exception as e:
+        logger.warning(f"CMTS collection failed to start: {e}")
+        return None
+
+
+def _stop_cmts_collection(test_id, snmp_dir, scenario):
+    """Stop CMTS Kafka collection and generate report."""
+    if test_id not in cmts_collectors:
+        return None
+    try:
+        entry = cmts_collectors.pop(test_id)
+        collector = entry["collector"]
+        collector.stop()
+        report = collector.generate_report(snmp_dir, scenario)
+        if report:
+            logger.info(f"\u2713 CMTS latency report: {os.path.basename(report)}")
+        return report
+    except Exception as e:
+        logger.warning(f"CMTS report generation failed: {e}")
+        cmts_collectors.pop(test_id, None)
+        return None
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -488,6 +529,9 @@ def _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iteratio
                 os.makedirs(snmp_dir, exist_ok=True)
                 logger.info(f"SNMP directory: {snmp_dir}")
                 
+                cmts_key = f"{test_id}_{scenario}"
+                _start_cmts_collection(cmts_key, scenario, snmp_dir)
+                
                 for i in range(iterations):
                     logger.info(f"Iteration {i+1}/{iterations}")
                     if modem_ipv6:
@@ -504,6 +548,7 @@ def _run_byteblower_test(test_id, bbp_file, scenarios, test_group_name, iteratio
                         run_snmp_collection(modem_ipv6, f"ByteBlower_{scenario}_iteration_{i+1}", "after", snmp_dir)
                 
                 # Generate latency report from SNMP before/after
+                _stop_cmts_collection(cmts_key, snmp_dir, scenario)
                 _run_latency_report(snmp_dir)
                 
                 # Stop PacketStorm if it was started
@@ -723,6 +768,9 @@ def run_iperf3():
             snmp_dir = os.path.join(parent_output_dir, scenario + platform_suffix + rtt_suffix_current)
             os.makedirs(snmp_dir, exist_ok=True)
             
+            cmts_key = f"iperf3_{scenario}_{rtt_suffix_current}"
+            _start_cmts_collection(cmts_key, scenario, snmp_dir)
+            
             for i in range(iterations):
                 if modem_ipv6:
                     run_snmp_collection(modem_ipv6, f"iPerf3{platform_suffix}_{scenario}_iteration_{i+1}", "before", snmp_dir)
@@ -731,6 +779,7 @@ def run_iperf3():
                 if modem_ipv6:
                     run_snmp_collection(modem_ipv6, f"iPerf3{platform_suffix}_{scenario}_iteration_{i+1}", "after", snmp_dir)
             
+            _stop_cmts_collection(cmts_key, snmp_dir, scenario)
             _run_latency_report(snmp_dir)
             iperf3.stop_iperf3_servers()
     
