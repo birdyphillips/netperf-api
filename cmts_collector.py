@@ -24,6 +24,11 @@ from collections import defaultdict
 
 try:
     from kafka import KafkaConsumer
+    import logging as _logging
+    for _name in ["kafka", "kafka.conn", "kafka.client", "kafka.consumer",
+                  "kafka.coordinator", "kafka.cluster", "kafka.protocol",
+                  "kafka.metrics", "kafka.producer"]:
+        _logging.getLogger(_name).setLevel(_logging.CRITICAL)
     KAFKA_AVAILABLE = True
 except ImportError:
     KAFKA_AVAILABLE = False
