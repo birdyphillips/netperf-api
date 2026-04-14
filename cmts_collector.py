@@ -100,6 +100,9 @@ class CmtsCollector:
 
         self._thread = None
         self._stop_event = threading.Event()
+        self._poll_event = threading.Event()   # signalled on each new polling timestamp
+        self._seen_timestamps = set()          # track unique polling timestamps
+        self._poll_count = 0
 
         # Collected samples: {(sfIndex, metric_name): [(timestamp_ms, value, labels), ...]}
         self.samples = defaultdict(list)
@@ -119,6 +122,9 @@ class CmtsCollector:
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
+        self._poll_event.clear()
+        self._seen_timestamps.clear()
+        self._poll_count = 0
         self.samples.clear()
         self.bin_snapshots.clear()
         self._started_at = time.time()
@@ -136,6 +142,26 @@ class CmtsCollector:
         bin_total = sum(sum(b.values()) for b in self.bin_snapshots.values())
         duration = self._stopped_at - self._started_at
         self.logger.info(f"Stopped — {total} metric samples, {int(bin_total)} bin packets collected in {duration:.0f}s")
+
+    def wait_for_poll(self, timeout=45):
+        """Block until the next new polling timestamp arrives from Kafka.
+
+        Returns True if a poll was received, False on timeout.
+        """
+        if not self.enabled:
+            return False
+        count_before = self._poll_count
+        self._poll_event.clear()
+        deadline = time.time() + timeout
+        while self._poll_count == count_before:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                self.logger.warning(f"wait_for_poll timed out after {timeout}s")
+                return False
+            self._poll_event.wait(timeout=min(remaining, 1.0))
+            self._poll_event.clear()
+        self.logger.info(f"Poll received (count={self._poll_count})")
+        return True
 
     # ------------------------------------------------------------------
     # Background consumer
@@ -197,6 +223,64 @@ class CmtsCollector:
         else:
             self.samples[(sf_index, metric_name)].append((ts, value, labels))
 
+        # Signal when a new polling timestamp appears
+        if ts not in self._seen_timestamps:
+            self._seen_timestamps.add(ts)
+            self._poll_count += 1
+            self._poll_event.set()
+
+    # ------------------------------------------------------------------
+    # Peak window detection
+    # ------------------------------------------------------------------
+
+    def _find_peak_window(self, sf_index):
+        """Find the 30s polling interval with the highest octet delta for a
+        given sfIndex and return the before/peak/after timestamps and deltas.
+
+        Returns a list of dicts with keys: timestamp_ms, before, after, delta,
+        interval, rate_mbps — sorted by timestamp.  The entry with the largest
+        delta is the peak; its neighbours are the before/after windows.
+        Returns empty list if insufficient data.
+        """
+        samples = self.samples.get((sf_index, "snmp_docsQosServiceFlowOctets"), [])
+        if len(samples) < 2:
+            return []
+
+        # Sort by timestamp
+        pts = sorted(samples, key=lambda x: x[0])
+
+        # Build interval rows: (ts, before_val, after_val, delta, interval_s, rate_mbps)
+        rows = []
+        for i in range(1, len(pts)):
+            ts_before, val_before, _ = pts[i - 1]
+            ts_after, val_after, _ = pts[i]
+            delta = val_after - val_before
+            interval_s = (ts_after - ts_before) / 1000.0
+            rate = (delta * 8) / (interval_s * 1_000_000) if interval_s > 0 else 0
+            rows.append({
+                "timestamp_ms": ts_after,
+                "ts_before": ts_before,
+                "before": val_before,
+                "after": val_after,
+                "delta": delta,
+                "interval": interval_s,
+                "rate_mbps": rate,
+            })
+
+        if not rows:
+            return []
+
+        # Find peak index
+        peak_idx = max(range(len(rows)), key=lambda i: rows[i]["delta"])
+
+        # Return before + peak + after (when available)
+        window = []
+        for i in [peak_idx - 1, peak_idx, peak_idx + 1]:
+            if 0 <= i < len(rows):
+                tag = "before" if i < peak_idx else ("peak" if i == peak_idx else "after")
+                window.append({**rows[i], "tag": tag})
+        return window
+
     # ------------------------------------------------------------------
     # Report generation
     # ------------------------------------------------------------------
@@ -222,15 +306,18 @@ class CmtsCollector:
         wb = openpyxl.Workbook()
         wb.remove(wb.active)
 
-        # Summary sheet
+        # Raw time-series sheet (tab 1)
+        self._write_timeseries(wb)
+
+        # Summary sheet (tab 2)
         self._write_summary(wb, sorted(sf_indices))
+
+        # Throughput / peak window sheet (tab 3)
+        self._write_peak_window(wb, sorted(sf_indices))
 
         # Per-SF sheets
         for sf in sorted(sf_indices):
             self._write_sf_sheet(wb, sf)
-
-        # Raw time-series sheet
-        self._write_timeseries(wb)
 
         wb.save(filename)
         self.logger.info(f"Report saved: {filename}")
@@ -278,7 +365,8 @@ class CmtsCollector:
             "P50 (ms)", "P99 (ms)", "P99.9 (ms)",
             "P50 AVG (ms)", "P99 AVG (ms)", "P99.9 AVG (ms)",
             "AQM Drops", "Congestion Marked", "Sanctioned Pkts",
-            "Throughput (Mbps)", "Pkt Loss %",
+            "Peak Throughput (Mbps)", "Pkt Loss %",
+            "Total Pkt Delta", "Total Octet Delta",
         ]
         for col, h in enumerate(headers, 1):
             self._cell(ws, 3, col, h, font=self._HEADER_FONT, fill=self._HEADER_FILL)
@@ -289,25 +377,25 @@ class CmtsCollector:
             total_pkts = sum(bin_deltas)
             avg_samples = [v for _, v, _ in self.samples.get((sf, "dp_flow_QueueLatencyAvgUsec"), [])]
             max_samples = [v for _, v, _ in self.samples.get((sf, "dp_flow_QueueLatencyMaxUsec"), [])]
-            aqm_samples = [v for _, v, _ in self.samples.get((sf, "dp_flow_AqmDroppedPackets"), [])]
-            cong_samples = [v for _, v, _ in self.samples.get((sf, "dp_flow_AqmMarkedCongestedPackets"), [])]
-            sanc_samples = [v for _, v, _ in self.samples.get((sf, "dp_flow_SanctionedPackets"), [])]
-            octets = [v for _, v, _ in self.samples.get((sf, "K_Samis1_DeltaOctetsPassed"), [])]
             pkts_passed = [v for _, v, _ in self.samples.get((sf, "K_Samis1_DeltaPacketsPassed"), [])]
             pkts_dropped = [v for _, v, _ in self.samples.get((sf, "K_Samis1_DeltaPacketsDropped"), [])]
 
             avg_lat = sum(avg_samples) / len(avg_samples) if avg_samples else 0
             max_lat = max(max_samples) if max_samples else 0
-            total_aqm = sum(aqm_samples)
-            total_cong = sum(cong_samples)
-            total_sanc = sum(sanc_samples)
-            total_octets = sum(octets)
+            total_aqm = self._counter_delta(sf, "dp_flow_AqmDroppedPackets")
+            total_cong = self._counter_delta(sf, "dp_flow_AqmMarkedCongestedPackets")
+            total_sanc = self._counter_delta(sf, "dp_flow_SanctionedPackets")
             total_passed = sum(pkts_passed)
             total_dropped = sum(pkts_dropped)
-
-            duration = (self._stopped_at - self._started_at) if self._stopped_at and self._started_at else 1
-            throughput = (total_octets * 8) / (duration * 1_000_000) if total_octets else 0
             loss_pct = (total_dropped / (total_passed + total_dropped) * 100) if (total_passed + total_dropped) > 0 else 0
+
+            # Total octets/packets across all intervals from snmp counters
+            all_intervals = self._get_all_intervals(sf)
+            total_octet_delta = sum(int(r["delta"]) for r in all_intervals)
+            total_pkt_delta = self._get_total_pkt_delta(sf)
+
+            # Peak throughput from highest single interval
+            peak_throughput = max((r["rate_mbps"] for r in all_intervals), default=0)
 
             p50 = self._calc_percentile(bin_deltas, 0.50)
             p99 = self._calc_percentile(bin_deltas, 0.99)
@@ -331,11 +419,30 @@ class CmtsCollector:
             self._cell(ws, row, 12, int(total_aqm), fill=self._CALC_FILL)
             self._cell(ws, row, 13, int(total_cong), fill=self._CALC_FILL)
             self._cell(ws, row, 14, int(total_sanc), fill=self._CALC_FILL)
-            self._cell(ws, row, 15, round(throughput, 4), fill=self._CALC_FILL, fmt="0.0000")
+            self._cell(ws, row, 15, round(peak_throughput, 4), fill=self._CALC_FILL, fmt="0.0000")
             self._cell(ws, row, 16, round(loss_pct, 4), fill=self._CALC_FILL, fmt="0.0000")
+            self._cell(ws, row, 17, total_pkt_delta, fill=self._CALC_FILL)
+            self._cell(ws, row, 18, total_octet_delta, fill=self._CALC_FILL)
             row += 1
 
-        for i, w in enumerate([14, 16, 18, 18, 18, 14, 14, 14, 16, 16, 16, 14, 18, 16, 18, 14], 1):
+        # TOTAL row — combined across all sfIndices
+        total_row = row
+        sum_throughput = 0
+        sum_pkt_delta = 0
+        sum_octet_delta = 0
+        for sf in sf_indices:
+            ai = self._get_all_intervals(sf)
+            if ai:
+                peak_r = max(ai, key=lambda r: r["delta"])
+                sum_throughput += peak_r["rate_mbps"]
+            sum_octet_delta += sum(int(r["delta"]) for r in ai)
+            sum_pkt_delta += self._get_total_pkt_delta(sf)
+        self._cell(ws, total_row, 1, "TOTAL", font=self._BOLD, fill=self._RESULT_FILL)
+        self._cell(ws, total_row, 15, round(sum_throughput, 4), font=self._BOLD, fill=self._RESULT_FILL, fmt="0.0000")
+        self._cell(ws, total_row, 17, sum_pkt_delta, font=self._BOLD, fill=self._RESULT_FILL)
+        self._cell(ws, total_row, 18, sum_octet_delta, font=self._BOLD, fill=self._RESULT_FILL)
+
+        for i, w in enumerate([14, 16, 18, 18, 18, 14, 14, 14, 16, 16, 16, 14, 18, 16, 18, 14, 16, 18], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
     def _write_sf_sheet(self, wb, sf_index):
@@ -432,6 +539,71 @@ class CmtsCollector:
         for i, w in enumerate([8, 14, 14, 14, 14, 16, 16, 12], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
+    def _write_peak_window(self, wb, sf_indices):
+        """Write all octet-delta intervals per sfIndex with peak highlighted."""
+        ws = wb.create_sheet(title="Throughput")
+        ws.sheet_properties.tabColor = "00B050"
+
+        ws.merge_cells("A1:I1")
+        ws["A1"] = f"QOS SERVICE FLOW OCTETS — {self.mac_colon}"
+        ws["A1"].font = Font(bold=True, size=14)
+        ws["A1"].alignment = self._CENTER
+
+        headers = ["SF Index", "Poll Before", "Poll After",
+                   "Before Octets", "After Octets", "Delta Octets",
+                   "Interval (s)", "Rate (Mbps)", "Tag"]
+        for col, h in enumerate(headers, 1):
+            self._cell(ws, 3, col, h, font=self._HEADER_FONT, fill=self._HEADER_FILL)
+
+        row = 4
+        grand_total_delta = 0
+        grand_total_rate = 0
+
+        for sf in sf_indices:
+            all_rows = self._get_all_intervals(sf)
+            if not all_rows:
+                continue
+
+            # Find peak index
+            peak_idx = max(range(len(all_rows)), key=lambda i: all_rows[i]["delta"])
+            sf_total_delta = 0
+
+            for i, entry in enumerate(all_rows):
+                is_peak = (i == peak_idx)
+                fill = self._RESULT_FILL if is_peak else None
+                tag = "PEAK" if is_peak else ""
+                ts_before_dt = datetime.utcfromtimestamp(entry["ts_before"] / 1000)
+                ts_after_dt = datetime.utcfromtimestamp(entry["timestamp_ms"] / 1000)
+                self._cell(ws, row, 1, f"sfIndex {sf}")
+                self._cell(ws, row, 2, ts_before_dt.strftime("%Y-%m-%d %H:%M:%S.%f"), fill=fill)
+                self._cell(ws, row, 3, ts_after_dt.strftime("%Y-%m-%d %H:%M:%S.%f"), fill=fill)
+                self._cell(ws, row, 4, int(entry["before"]), fill=fill)
+                self._cell(ws, row, 5, int(entry["after"]), fill=fill)
+                self._cell(ws, row, 6, int(entry["delta"]), fill=fill)
+                self._cell(ws, row, 7, round(entry["interval"], 6), fill=fill, fmt="0.000000")
+                self._cell(ws, row, 8, round(entry["rate_mbps"], 4), fill=fill, fmt="0.0000")
+                self._cell(ws, row, 9, tag, font=self._BOLD if is_peak else None, fill=fill)
+                sf_total_delta += int(entry["delta"])
+                row += 1
+
+            # SF total row
+            sf_total_rate = (sf_total_delta * 8) / (len(all_rows) * 30 * 1_000_000) if all_rows else 0
+            self._cell(ws, row, 1, f"sfIndex {sf}", font=self._BOLD)
+            self._cell(ws, row, 5, "TOTAL", font=self._BOLD)
+            self._cell(ws, row, 6, sf_total_delta, font=self._BOLD, fill=self._CALC_FILL)
+            row += 1
+
+            grand_total_delta += sf_total_delta
+            row += 1  # blank separator
+
+        # Combined total across all sfIndices
+        self._cell(ws, row, 1, "ALL SF COMBINED", font=self._BOLD, fill=self._RESULT_FILL)
+        self._cell(ws, row, 5, "TOTAL", font=self._BOLD, fill=self._RESULT_FILL)
+        self._cell(ws, row, 6, grand_total_delta, font=self._BOLD, fill=self._RESULT_FILL)
+
+        for i, w in enumerate([12, 28, 28, 18, 18, 18, 14, 14, 8], 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
     def _write_timeseries(self, wb):
         """Write raw time-series data for charting."""
         ws = wb.create_sheet(title="TimeSeries")
@@ -454,6 +626,59 @@ class CmtsCollector:
 
         for i, w in enumerate([14, 12, 12, 40, 20], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
+
+    def _get_all_intervals(self, sf_index):
+        """Build all consecutive interval deltas for snmp_docsQosServiceFlowOctets."""
+        samples = self.samples.get((sf_index, "snmp_docsQosServiceFlowOctets"), [])
+        if len(samples) < 2:
+            return []
+        pts = sorted(samples, key=lambda x: x[0])
+        rows = []
+        for i in range(1, len(pts)):
+            ts_before, val_before, _ = pts[i - 1]
+            ts_after, val_after, _ = pts[i]
+            delta = val_after - val_before
+            interval_s = (ts_after - ts_before) / 1000.0
+            rate = (delta * 8) / (interval_s * 1_000_000) if interval_s > 0 else 0
+            rows.append({
+                "timestamp_ms": ts_after,
+                "ts_before": ts_before,
+                "before": val_before,
+                "after": val_after,
+                "delta": delta,
+                "interval": interval_s,
+                "rate_mbps": rate,
+            })
+        return rows
+
+    def _get_total_pkt_delta(self, sf_index):
+        """Return total packet delta (last - first) from snmp_docsQosServiceFlowPackets."""
+        samples = self.samples.get((sf_index, "snmp_docsQosServiceFlowPackets"), [])
+        if len(samples) < 2:
+            return 0
+        pts = sorted(samples, key=lambda x: x[0])
+        return int(pts[-1][1] - pts[0][1])
+
+    def _get_peak_pkt_delta(self, sf_index, peak_entry):
+        """Get the packet delta for the same interval as the peak octet entry."""
+        if not peak_entry:
+            return 0
+        samples = self.samples.get((sf_index, "snmp_docsQosServiceFlowPackets"), [])
+        if len(samples) < 2:
+            return 0
+        pts = sorted(samples, key=lambda x: x[0])
+        for i in range(1, len(pts)):
+            if pts[i][0] == peak_entry["timestamp_ms"]:
+                return int(pts[i][1] - pts[i - 1][1])
+        return 0
+
+    def _counter_delta(self, sf_index, metric_name):
+        """Return last - first value for a cumulative counter metric."""
+        samples = self.samples.get((sf_index, metric_name), [])
+        if len(samples) < 2:
+            return 0
+        pts = sorted(samples, key=lambda x: x[0])
+        return int(pts[-1][1] - pts[0][1])
 
     # ------------------------------------------------------------------
     # Bin delta & percentile helpers

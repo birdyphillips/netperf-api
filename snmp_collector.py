@@ -595,29 +595,165 @@ def write_sf_sheet(wb, sheet_name, sf_data, tp_data=None):
         ws.column_dimensions[get_column_letter(i)].width = w
 
 
-def write_summary_sheet(wb, all_results, tp_stats=None):
-    """Write a summary sheet comparing all service flows."""
+def parse_congestion_stats(filepath):
+    """Parse Congestion Stats Table for AQM drops, congestion marked, sanctioned per SFID.
+    OID .30.1.1 = AQM dropped, .30.1.3 = congestion marked, .30.1.4 = sanctioned."""
+    with open(filepath, "r") as f:
+        content = f.read()
+    match = re.search(r"Congestion Stats Table\n=+\n(.*?)(?:\n\n|\Z)", content, re.DOTALL)
+    if not match:
+        return {}
+    section = match.group(1)
+    stats = {}
+    sub_map = {"1": "aqm_drops", "3": "congestion_marked", "4": "sanctioned"}
+    for line in section.splitlines():
+        m = re.search(r"\.30\.1\.(\d+)\.2\.(\d+)\s*=\s*Counter64:\s*(\d+)", line)
+        if m:
+            sub_oid, sfid_str, val_str = m.group(1), m.group(2), m.group(3)
+            if sub_oid in sub_map:
+                sfid = int(sfid_str)
+                stats.setdefault(sfid, {"aqm_drops": 0, "congestion_marked": 0, "sanctioned": 0})
+                stats[sfid][sub_map[sub_oid]] = int(val_str)
+    return stats
+
+
+def write_timeseries_sheet(wb, before_file, after_file, fs_before, fs_after, cong_before, cong_after, before_bins, after_bins):
+    """Write raw SNMP before/after values into a TimeSeries tab."""
+    ws = wb.create_sheet(title="TimeSeries")
+    ws.sheet_properties.tabColor = "FF6600"
+
+    headers = ["Phase", "Timestamp", "SFID", "Metric", "Value"]
+    for col, h in enumerate(headers, 1):
+        _styled_cell(ws, 1, col, h, font=_HEADER_FONT, fill=_HEADER_FILL)
+
+    ts_before = parse_snmp_timestamp(before_file) or "unknown"
+    ts_after = parse_snmp_timestamp(after_file) or "unknown"
+    ts_b_str = ts_before.strftime("%Y-%m-%d %H:%M:%S") if hasattr(ts_before, 'strftime') else str(ts_before)
+    ts_a_str = ts_after.strftime("%Y-%m-%d %H:%M:%S") if hasattr(ts_after, 'strftime') else str(ts_after)
+
+    row = 2
+    for phase, ts_str, fs, cong, bins in [
+        ("BEFORE", ts_b_str, fs_before, cong_before, before_bins),
+        ("AFTER", ts_a_str, fs_after, cong_after, after_bins),
+    ]:
+        for sfid in sorted(fs.keys()):
+            for metric, val in [("packets", fs[sfid]["packets"]), ("octets", fs[sfid]["octets"]), ("dropped", fs[sfid]["dropped"])]:
+                _styled_cell(ws, row, 1, phase)
+                _styled_cell(ws, row, 2, ts_str)
+                _styled_cell(ws, row, 3, sfid)
+                _styled_cell(ws, row, 4, metric)
+                _styled_cell(ws, row, 5, val)
+                row += 1
+        for sfid in sorted(cong.keys()):
+            for metric, val in [("aqm_drops", cong[sfid]["aqm_drops"]), ("congestion_marked", cong[sfid]["congestion_marked"]), ("sanctioned", cong[sfid]["sanctioned"])]:
+                _styled_cell(ws, row, 1, phase)
+                _styled_cell(ws, row, 2, ts_str)
+                _styled_cell(ws, row, 3, sfid)
+                _styled_cell(ws, row, 4, metric)
+                _styled_cell(ws, row, 5, val)
+                row += 1
+        for sfid in sorted(bins.keys()):
+            for sub_oid in sorted(bins[sfid].keys()):
+                _styled_cell(ws, row, 1, phase)
+                _styled_cell(ws, row, 2, ts_str)
+                _styled_cell(ws, row, 3, sfid)
+                _styled_cell(ws, row, 4, f"latency_bin_{sub_oid}")
+                _styled_cell(ws, row, 5, bins[sfid][sub_oid])
+                row += 1
+
+    for i, w in enumerate([10, 22, 10, 22, 20], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+
+def write_throughput_sheet(wb, fs_before, fs_after, before_file, after_file):
+    """Write Throughput tab showing octet/packet deltas per SFID."""
+    ws = wb.create_sheet(title="Throughput")
+    ws.sheet_properties.tabColor = "00B050"
+
+    ws.merge_cells("A1:G1")
+    ws["A1"] = "QOS SERVICE FLOW OCTETS"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A1"].alignment = _CENTER
+
+    ts_before = parse_snmp_timestamp(before_file)
+    ts_after = parse_snmp_timestamp(after_file)
+    ts_b_str = ts_before.strftime("%Y-%m-%d %H:%M:%S") if ts_before else "unknown"
+    ts_a_str = ts_after.strftime("%Y-%m-%d %H:%M:%S") if ts_after else "unknown"
+    duration_s = (ts_after - ts_before).total_seconds() if ts_before and ts_after else 0
+
+    headers = ["SFID", "Poll Before", "Poll After", "Before Octets", "After Octets",
+               "Delta Octets", "Rate (Mbps)"]
+    for col, h in enumerate(headers, 1):
+        _styled_cell(ws, 3, col, h, font=_HEADER_FONT, fill=_HEADER_FILL)
+
+    row = 4
+    grand_total_delta = 0
+    all_sfids = sorted(set(fs_before) & set(fs_after))
+    for sfid in all_sfids:
+        d_octets = max(fs_after[sfid]["octets"] - fs_before[sfid]["octets"], 0)
+        rate = (d_octets * 8) / (duration_s * 1_000_000) if duration_s > 0 else 0
+        fill = _RESULT_FILL if d_octets > 0 else None
+        _styled_cell(ws, row, 1, f"SFID {sfid}")
+        _styled_cell(ws, row, 2, ts_b_str, fill=fill)
+        _styled_cell(ws, row, 3, ts_a_str, fill=fill)
+        _styled_cell(ws, row, 4, fs_before[sfid]["octets"], fill=fill)
+        _styled_cell(ws, row, 5, fs_after[sfid]["octets"], fill=fill)
+        _styled_cell(ws, row, 6, d_octets, fill=fill)
+        _styled_cell(ws, row, 7, round(rate, 4), fill=fill, fmt="0.0000")
+        grand_total_delta += d_octets
+        row += 1
+
+    grand_rate = (grand_total_delta * 8) / (duration_s * 1_000_000) if duration_s > 0 else 0
+    _styled_cell(ws, row, 1, "TOTAL", font=_BOLD, fill=_RESULT_FILL)
+    _styled_cell(ws, row, 6, grand_total_delta, font=_BOLD, fill=_RESULT_FILL)
+    _styled_cell(ws, row, 7, round(grand_rate, 4), font=_BOLD, fill=_RESULT_FILL, fmt="0.0000")
+
+    for i, w in enumerate([12, 22, 22, 18, 18, 18, 14], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+
+def write_summary_sheet(wb, all_results, tp_stats=None, fs_before=None, fs_after=None,
+                        cong_before=None, cong_after=None, before_file=None, after_file=None):
+    """Write a summary sheet matching cmts_collector format."""
     ws = wb.create_sheet(title="Summary")
     ws.sheet_properties.tabColor = "4472C4"
 
-    ws.merge_cells("A1:L1")
-    ws["A1"] = "LATENCY PERCENTILE SUMMARY"
+    ws.merge_cells("A1:R1")
+    ws["A1"] = "CMTS UPSTREAM LATENCY SUMMARY"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A1"].alignment = _CENTER
 
     headers = [
-        "Service Flow", "Total Pkts", "Weighted Avg (ms)",
-        "P50 (ms)", "P99 (ms)", "P99.9 (ms)",
+        "Service Flow", "Total Bins Pkts",
+        "Weighted Avg (ms)", "P50 (ms)", "P99 (ms)", "P99.9 (ms)",
         "P50 AVG (ms)", "P99 AVG (ms)", "P99.9 AVG (ms)",
-        "Peak Bin", "Throughput (Mbps)", "Pkt Loss %",
+        "AQM Drops", "Congestion Marked", "Sanctioned Pkts",
+        "Throughput (Mbps)", "Pkt Loss %",
+        "Total Pkt Delta", "Total Octet Delta",
     ]
     for col, h in enumerate(headers, 1):
         _styled_cell(ws, 3, col, h, font=_HEADER_FONT, fill=_HEADER_FILL)
 
     if not tp_stats:
         tp_stats = {}
+    if not fs_before:
+        fs_before = {}
+    if not fs_after:
+        fs_after = {}
+    if not cong_before:
+        cong_before = {}
+    if not cong_after:
+        cong_after = {}
+
+    ts_before = parse_snmp_timestamp(before_file) if before_file else None
+    ts_after = parse_snmp_timestamp(after_file) if after_file else None
+    duration_s = (ts_after - ts_before).total_seconds() if ts_before and ts_after else 0
 
     row = 4
+    sum_throughput = 0
+    sum_pkt_delta = 0
+    sum_octet_delta = 0
+
     for sfid, sf_data in sorted(all_results.items()):
         deltas = sf_data["deltas"]
         total = sum(deltas)
@@ -628,8 +764,24 @@ def write_summary_sheet(wb, all_results, tp_stats=None):
         p50a = calc_percentile_avg(deltas, 0.50)
         p99a = calc_percentile_avg(deltas, 0.99)
         p999a = calc_percentile_avg(deltas, 0.999)
-        peak_idx = deltas.index(max(deltas))
-        peak_label = f"{BIN_EDGES_MS[peak_idx]}-{BIN_EDGES_MS[peak_idx+1]} ms"
+
+        cb = cong_before.get(sfid, {"aqm_drops": 0, "congestion_marked": 0, "sanctioned": 0})
+        ca = cong_after.get(sfid, {"aqm_drops": 0, "congestion_marked": 0, "sanctioned": 0})
+        aqm = max(ca["aqm_drops"] - cb["aqm_drops"], 0)
+        cong = max(ca["congestion_marked"] - cb["congestion_marked"], 0)
+        sanc = max(ca["sanctioned"] - cb["sanctioned"], 0)
+
+        d_octets = 0
+        d_pkts = 0
+        throughput = 0
+        loss_pct = 0
+        if sfid in fs_before and sfid in fs_after:
+            d_octets = max(fs_after[sfid]["octets"] - fs_before[sfid]["octets"], 0)
+            d_pkts = max(fs_after[sfid]["packets"] - fs_before[sfid]["packets"], 0)
+            d_dropped = max(fs_after[sfid]["dropped"] - fs_before[sfid]["dropped"], 0)
+            throughput = (d_octets * 8) / (duration_s * 1_000_000) if duration_s > 0 else 0
+            total_pkts = d_pkts + d_dropped
+            loss_pct = (d_dropped / total_pkts * 100) if total_pkts > 0 else 0
 
         _styled_cell(ws, row, 1, f"SFID {sfid}")
         _styled_cell(ws, row, 2, total, fill=_CALC_FILL)
@@ -640,13 +792,24 @@ def write_summary_sheet(wb, all_results, tp_stats=None):
         _styled_cell(ws, row, 7, round(p50a, 4), fill=_RESULT_FILL, fmt="0.0000")
         _styled_cell(ws, row, 8, round(p99a, 4), fill=_RESULT_FILL, fmt="0.0000")
         _styled_cell(ws, row, 9, round(p999a, 4), fill=_RESULT_FILL, fmt="0.0000")
-        _styled_cell(ws, row, 10, peak_label, fill=_CALC_FILL)
-        tp = tp_stats.get(sfid)
-        _styled_cell(ws, row, 11, round(tp["throughput_mbps"], 4) if tp else "N/A", fill=_CALC_FILL, fmt="0.0000")
-        _styled_cell(ws, row, 12, round(tp["loss_pct"], 4) if tp else "N/A", fill=_CALC_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 10, aqm, fill=_CALC_FILL)
+        _styled_cell(ws, row, 11, cong, fill=_CALC_FILL)
+        _styled_cell(ws, row, 12, sanc, fill=_CALC_FILL)
+        _styled_cell(ws, row, 13, round(throughput, 4), fill=_CALC_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 14, round(loss_pct, 4), fill=_CALC_FILL, fmt="0.0000")
+        _styled_cell(ws, row, 15, d_pkts, fill=_CALC_FILL)
+        _styled_cell(ws, row, 16, d_octets, fill=_CALC_FILL)
+        sum_throughput += throughput
+        sum_pkt_delta += d_pkts
+        sum_octet_delta += d_octets
         row += 1
 
-    for i, w in enumerate([16, 14, 18, 14, 14, 14, 16, 16, 16, 20, 18, 14], 1):
+    _styled_cell(ws, row, 1, "TOTAL", font=_BOLD, fill=_RESULT_FILL)
+    _styled_cell(ws, row, 13, round(sum_throughput, 4), font=_BOLD, fill=_RESULT_FILL, fmt="0.0000")
+    _styled_cell(ws, row, 15, sum_pkt_delta, font=_BOLD, fill=_RESULT_FILL)
+    _styled_cell(ws, row, 16, sum_octet_delta, font=_BOLD, fill=_RESULT_FILL)
+
+    for i, w in enumerate([16, 16, 18, 14, 14, 14, 16, 16, 16, 14, 18, 16, 18, 14, 16, 18], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
 
@@ -670,6 +833,10 @@ def generate_latency_report(before_file, after_file, output_file=None):
         return None
 
     tp_stats = compute_throughput_and_loss(before_file, after_file)
+    fs_before = parse_flow_stats(before_file)
+    fs_after = parse_flow_stats(after_file)
+    cong_before = parse_congestion_stats(before_file)
+    cong_after = parse_congestion_stats(after_file)
 
     if output_file is None:
         output_dir = os.path.dirname(after_file) or "."
@@ -680,7 +847,11 @@ def generate_latency_report(before_file, after_file, output_file=None):
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
-    write_summary_sheet(wb, all_deltas, tp_stats)
+    write_timeseries_sheet(wb, before_file, after_file, fs_before, fs_after,
+                           cong_before, cong_after, before_bins, after_bins)
+    write_summary_sheet(wb, all_deltas, tp_stats, fs_before, fs_after,
+                        cong_before, cong_after, before_file, after_file)
+    write_throughput_sheet(wb, fs_before, fs_after, before_file, after_file)
 
     for sfid, sf_data in sorted(all_deltas.items()):
         write_sf_sheet(wb, f"SFID_{sfid}", sf_data, tp_stats.get(sfid))
