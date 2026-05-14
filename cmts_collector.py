@@ -587,7 +587,8 @@ class CmtsCollector:
                 row += 1
 
             # SF total row
-            sf_total_rate = (sf_total_delta * 8) / (len(all_rows) * 30 * 1_000_000) if all_rows else 0
+            total_duration = sum(r["interval"] for r in all_rows) if all_rows else 0
+            sf_total_rate = (sf_total_delta * 8) / (total_duration * 1_000_000) if total_duration > 0 else 0
             self._cell(ws, row, 1, f"sfIndex {sf}", font=self._BOLD)
             self._cell(ws, row, 5, "TOTAL", font=self._BOLD)
             self._cell(ws, row, 6, sf_total_delta, font=self._BOLD, fill=self._CALC_FILL)
@@ -623,6 +624,21 @@ class CmtsCollector:
                 self._cell(ws, row, 4, metric)
                 self._cell(ws, row, 5, round(val, 6) if val != int(val) else int(val))
                 row += 1
+
+        # Write bin snapshot data (all 16 bins per poll, including zero-traffic polls)
+        # Collect all sf indices that have bin data
+        bin_sf_indices = set(sf for (sf, ts) in self.bin_snapshots.keys())
+        all_timestamps = sorted(self._seen_timestamps)
+        for sf in sorted(bin_sf_indices):
+            for ts in all_timestamps:
+                bins = self.bin_snapshots.get((sf, ts), {})
+                for bin_num in range(1, NUM_BINS + 1):
+                    self._cell(ws, row, 1, datetime.fromtimestamp(ts / 1000).strftime("%H:%M:%S"))
+                    self._cell(ws, row, 2, round((ts - base_ts) / 1000, 1))
+                    self._cell(ws, row, 3, sf)
+                    self._cell(ws, row, 4, f"dp_flow_QueueLatencyBinPktCount_bin{bin_num}")
+                    self._cell(ws, row, 5, int(bins.get(bin_num, 0)))
+                    row += 1
 
         for i, w in enumerate([14, 12, 12, 40, 20], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
