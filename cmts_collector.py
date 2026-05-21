@@ -234,39 +234,13 @@ class CmtsCollector:
     # ------------------------------------------------------------------
 
     def _find_peak_window(self, sf_index):
-        """Find the 30s polling interval with the highest octet delta for a
-        given sfIndex and return the before/peak/after timestamps and deltas.
+        """Find the interval with the highest octet delta for a given sfIndex
+        and return the before/peak/after entries.
 
-        Returns a list of dicts with keys: timestamp_ms, before, after, delta,
-        interval, rate_mbps — sorted by timestamp.  The entry with the largest
-        delta is the peak; its neighbours are the before/after windows.
-        Returns empty list if insufficient data.
+        Uses _get_all_intervals (which merges zero-delta gaps) so that rates
+        reflect the true counter accumulation window.
         """
-        samples = self.samples.get((sf_index, "snmp_docsQosServiceFlowOctets"), [])
-        if len(samples) < 2:
-            return []
-
-        # Sort by timestamp
-        pts = sorted(samples, key=lambda x: x[0])
-
-        # Build interval rows: (ts, before_val, after_val, delta, interval_s, rate_mbps)
-        rows = []
-        for i in range(1, len(pts)):
-            ts_before, val_before, _ = pts[i - 1]
-            ts_after, val_after, _ = pts[i]
-            delta = val_after - val_before
-            interval_s = (ts_after - ts_before) / 1000.0
-            rate = (delta * 8) / (interval_s * 1_000_000) if interval_s > 0 else 0
-            rows.append({
-                "timestamp_ms": ts_after,
-                "ts_before": ts_before,
-                "before": val_before,
-                "after": val_after,
-                "delta": delta,
-                "interval": interval_s,
-                "rate_mbps": rate,
-            })
-
+        rows = self._get_all_intervals(sf_index)
         if not rows:
             return []
 
@@ -644,27 +618,39 @@ class CmtsCollector:
             ws.column_dimensions[get_column_letter(i)].width = w
 
     def _get_all_intervals(self, sf_index):
-        """Build all consecutive interval deltas for snmp_docsQosServiceFlowOctets."""
+        """Build all consecutive interval deltas for snmp_docsQosServiceFlowOctets.
+
+        Merges zero-delta intervals with the following non-zero interval so that
+        the rate calculation uses the true accumulation window.  This handles the
+        case where the CMTS updates the counter less frequently than our polling
+        rate (e.g. counter updates every 30s but we poll every 15s).
+        """
         samples = self.samples.get((sf_index, "snmp_docsQosServiceFlowOctets"), [])
         if len(samples) < 2:
             return []
         pts = sorted(samples, key=lambda x: x[0])
         rows = []
+        merge_start_ts = pts[0][0]
+        merge_start_val = pts[0][1]
         for i in range(1, len(pts)):
-            ts_before, val_before, _ = pts[i - 1]
             ts_after, val_after, _ = pts[i]
-            delta = val_after - val_before
-            interval_s = (ts_after - ts_before) / 1000.0
+            delta = val_after - merge_start_val
+            if delta == 0:
+                # Counter hasn't updated yet — extend the window
+                continue
+            interval_s = (ts_after - merge_start_ts) / 1000.0
             rate = (delta * 8) / (interval_s * 1_000_000) if interval_s > 0 else 0
             rows.append({
                 "timestamp_ms": ts_after,
-                "ts_before": ts_before,
-                "before": val_before,
+                "ts_before": merge_start_ts,
+                "before": merge_start_val,
                 "after": val_after,
                 "delta": delta,
                 "interval": interval_s,
                 "rate_mbps": rate,
             })
+            merge_start_ts = ts_after
+            merge_start_val = val_after
         return rows
 
     def _get_total_pkt_delta(self, sf_index):
