@@ -620,37 +620,31 @@ class CmtsCollector:
     def _get_all_intervals(self, sf_index):
         """Build all consecutive interval deltas for snmp_docsQosServiceFlowOctets.
 
-        Merges zero-delta intervals with the following non-zero interval so that
-        the rate calculation uses the true accumulation window.  This handles the
-        case where the CMTS updates the counter less frequently than our polling
-        rate (e.g. counter updates every 30s but we poll every 15s).
+        Skips zero-delta intervals (no traffic) so that throughput calculations
+        only reflect intervals where data actually flowed.
         """
         samples = self.samples.get((sf_index, "snmp_docsQosServiceFlowOctets"), [])
         if len(samples) < 2:
             return []
         pts = sorted(samples, key=lambda x: x[0])
         rows = []
-        merge_start_ts = pts[0][0]
-        merge_start_val = pts[0][1]
         for i in range(1, len(pts)):
+            ts_before, val_before, _ = pts[i - 1]
             ts_after, val_after, _ = pts[i]
-            delta = val_after - merge_start_val
+            delta = val_after - val_before
             if delta == 0:
-                # Counter hasn't updated yet — extend the window
                 continue
-            interval_s = (ts_after - merge_start_ts) / 1000.0
+            interval_s = (ts_after - ts_before) / 1000.0
             rate = (delta * 8) / (interval_s * 1_000_000) if interval_s > 0 else 0
             rows.append({
                 "timestamp_ms": ts_after,
-                "ts_before": merge_start_ts,
-                "before": merge_start_val,
+                "ts_before": ts_before,
+                "before": val_before,
                 "after": val_after,
                 "delta": delta,
                 "interval": interval_s,
                 "rate_mbps": rate,
             })
-            merge_start_ts = ts_after
-            merge_start_val = val_after
         return rows
 
     def _get_total_pkt_delta(self, sf_index):
