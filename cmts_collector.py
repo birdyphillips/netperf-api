@@ -141,7 +141,10 @@ class CmtsCollector:
         total = sum(len(v) for v in self.samples.values())
         bin_total = sum(sum(b.values()) for b in self.bin_snapshots.values())
         duration = self._stopped_at - self._started_at
-        self.logger.info(f"Stopped — {total} metric samples, {int(bin_total)} bin packets collected in {duration:.0f}s")
+        if total == 0 and bin_total == 0:
+            self.logger.warning(f"No data received for MAC {self.mac_colon} — modem may not be on this vCMTS ({self.topic})")
+        else:
+            self.logger.info(f"Stopped — {total} metric samples, {int(bin_total)} bin packets collected in {duration:.0f}s")
 
     def wait_for_poll(self, timeout=45):
         """Block until the next new polling timestamp arrives from Kafka.
@@ -266,7 +269,7 @@ class CmtsCollector:
 
         os.makedirs(output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = os.path.join(output_dir, f"CMTS_Latency_Report_{test_name}_{timestamp}.xlsx")
+        filename = os.path.join(output_dir, f"Kafka_DS_Latency_Report_{test_name}_{timestamp}.xlsx")
 
         # Group data by sfIndex
         sf_indices = set()
@@ -274,7 +277,7 @@ class CmtsCollector:
             sf_indices.add(key[0] if isinstance(key, tuple) else key)
 
         if not sf_indices:
-            self.logger.warning("No data collected — skipping report")
+            self.logger.warning(f"No data collected for {self.mac_colon} — modem not on this vCMTS. Skipping Kafka DS report.")
             return None
 
         wb = openpyxl.Workbook()
