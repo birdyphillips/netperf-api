@@ -163,6 +163,13 @@ class Config:
     def snmp_retries(self):
         return self.get('snmp', 'retries', default=2)
     
+    @property
+    def icmts_ip(self):
+        return self.get('snmp', 'icmts_ip', default='')
+    
+    @property
+    def icmts_community(self):
+        return self.get('snmp', 'icmts_community', default='NMISread')
     # CMTS
     @property
     def vcmts_password(self):

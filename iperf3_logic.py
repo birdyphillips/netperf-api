@@ -60,8 +60,14 @@ class IPerf3Logic:
         self.log_rotator = LogRotator(self.log_file)
         
         # Define scenario commands based on output format and platform
-        json_ext = "-i 1" if platform_override == 'macos' else ""
-        file_ext = "txt"
+        # macOS: txt output with -i 1 interval reporting
+        # Linux: JSON output with -J flag
+        if platform_override == 'macos':
+            json_ext = "-i 1"
+            file_ext = "txt"
+        else:
+            json_ext = "-J"
+            file_ext = "json"
         group_name = self.test_group_name or "HSI029"
         
         # Detect platform for command selection
@@ -73,139 +79,168 @@ class IPerf3Logic:
             # macOS commands using iperf3-darwin with Apple QUIC and L4S
             self.scenario_commands = {
                 "US_Combined": [
-                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 30 -P 4 -p 9201 {json_ext} > US_{group_name}_Combined_4QUIC_CL.{file_ext} &",
-                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > US_{group_name}_Combined_1QUIC_LL.{file_ext} &",
-                    f"iperf3-darwin -c {self.server_ip} -u -b 0.8192M -t 30 -p 9209 {json_ext} > US_{group_name}_Combined_1UDP_CL.{file_ext} &",
-                    f"iperf3-darwin -c {self.server_ip} -u -b 0.8192M --dscp 45 -t 30 -p 9211 {json_ext} > US_{group_name}_Combined_1UDP_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 60 -P 4 -p 9201 {json_ext} > US_{group_name}_Combined_4QUIC_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 60 -P 1 -p 9207 --apple-l4s {json_ext} > US_{group_name}_Combined_1QUIC_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} -u -b 0.8192M -t 60 -p 9209 {json_ext} > US_{group_name}_Combined_1UDP_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} -u -b 0.8192M --dscp 45 -t 60 -p 9211 {json_ext} > US_{group_name}_Combined_1UDP_LL.{file_ext} &",
                     "wait"
                 ],
                 "US_Classic_Only": [
-                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 30 -P 4 -p 9201 {json_ext} > US_{group_name}_Classic_Only_4QUIC_CL.{file_ext} &",
-                    f"iperf3-darwin -c {self.server_ip} -u -b 0.8192M -t 30 -p 9209 {json_ext} > US_{group_name}_Classic_Only_1UDP_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 60 -P 4 -p 9201 {json_ext} > US_{group_name}_Classic_Only_4QUIC_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} -u -b 0.8192M -t 60 -p 9209 {json_ext} > US_{group_name}_Classic_Only_1UDP_CL.{file_ext} &",
                     "wait"
                 ],
                 "US_LL_Only": [
-                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > US_{group_name}_LL_Only_1QUIC_LL.{file_ext} &",
-                    f"iperf3-darwin -c {self.server_ip} -u -b 0.8192M --dscp 45 -t 30 -p 9211 {json_ext} > US_{group_name}_LL_Only_1UDP_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 60 -P 1 -p 9207 --apple-l4s {json_ext} > US_{group_name}_LL_Only_1QUIC_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} -u -b 0.8192M --dscp 45 -t 60 -p 9211 {json_ext} > US_{group_name}_LL_Only_1UDP_LL.{file_ext} &",
                     "wait"
                 ],
                 "DS_Combined": [
-                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 4 -p 9201 {json_ext} > DS_{group_name}_Combined_4QUIC_CL.{file_ext} &",
-                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_Combined_1QUIC_LL.{file_ext} &",
-                    f"iperf3-darwin -c {self.client_ip} -u -b 0.8192M -t 30 -p 9209 {json_ext} > DS_{group_name}_Combined_1UDP_CL.{file_ext} &",
-                    f"iperf3-darwin -c {self.client_ip} -u -b 0.8192M --dscp 45 -t 30 -p 9211 {json_ext} > DS_{group_name}_Combined_1UDP_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 60 -P 4 -p 9201 {json_ext} > DS_{group_name}_Combined_4QUIC_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 60 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_Combined_1QUIC_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} -u -b 0.8192M -t 60 -p 9209 {json_ext} > DS_{group_name}_Combined_1UDP_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} -u -b 0.8192M --dscp 45 -t 60 -p 9211 {json_ext} > DS_{group_name}_Combined_1UDP_LL.{file_ext} &",
                     "wait"
                 ],
                 "DS_Classic_Only": [
-                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 4 -p 9201 {json_ext} > DS_{group_name}_Classic_Only_4QUIC_CL.{file_ext} &",
-                    f"iperf3-darwin -c {self.client_ip} -u -b 0.8192M -t 30 -p 9209 {json_ext} > DS_{group_name}_Classic_Only_1UDP_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 60 -P 4 -p 9201 {json_ext} > DS_{group_name}_Classic_Only_4QUIC_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} -u -b 0.8192M -t 60 -p 9209 {json_ext} > DS_{group_name}_Classic_Only_1UDP_CL.{file_ext} &",
                     "wait"
                 ],
                 "DS_LL_Only": [
-                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_LL_Only_1QUIC_LL.{file_ext} &",
-                    f"iperf3-darwin -c {self.client_ip} -u -b 0.8192M --dscp 45 -t 30 -p 9211 {json_ext} > DS_{group_name}_LL_Only_1UDP_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 60 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_LL_Only_1QUIC_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} -u -b 0.8192M --dscp 45 -t 60 -p 9211 {json_ext} > DS_{group_name}_LL_Only_1UDP_LL.{file_ext} &",
                     "wait"
                 ],
                 "US_UDP_NC": [
-                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > US_{group_name}_UDP_NC_QUIC.{file_ext} &",
-                    f"iperf3-darwin -c {self.server_ip} -u -b 530M --dscp 45 -t 30 -p 9211 {json_ext} > US_{group_name}_UDP_NC.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 60 -P 1 -p 9207 --apple-l4s {json_ext} > US_{group_name}_UDP_NC_QUIC.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} -u -b 530M --dscp 45 -t 60 -p 9211 {json_ext} > US_{group_name}_UDP_NC.{file_ext} &",
                     "wait"
                 ],
                 "DS_UDP_NC": [
-                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_UDP_NC_QUIC.{file_ext} &",
-                    f"iperf3-darwin -c {self.client_ip} -u -b 530M --dscp 45 -t 30 -p 9211 {json_ext} > DS_{group_name}_UDP_NC.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 60 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_UDP_NC_QUIC.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} -u -b 530M --dscp 45 -t 60 -p 9211 {json_ext} > DS_{group_name}_UDP_NC.{file_ext} &",
                     "wait"
                 ],
                 "US_LL_1TCP_LL": [
-                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > US_{group_name}_LL_1TCP_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 60 -P 1 -p 9207 --apple-l4s {json_ext} > US_{group_name}_LL_1TCP_LL.{file_ext} &",
                     "wait"
                 ],
                 "US_LL_4TCP_LL": [
-                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 30 -P 4 -p 9207 --apple-l4s {json_ext} > US_{group_name}_LL_4TCP_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.server_ip} --apple-quic -t 60 -P 4 -p 9207 --apple-l4s {json_ext} > US_{group_name}_LL_4TCP_LL.{file_ext} &",
                     "wait"
                 ],
                 "DS_LL_1TCP_LL": [
-                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_LL_1TCP_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 60 -P 1 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_LL_1TCP_LL.{file_ext} &",
                     "wait"
                 ],
                 "DS_LL_4TCP_LL": [
-                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 30 -P 4 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_LL_4TCP_LL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} --apple-quic -t 60 -P 4 -p 9207 --apple-l4s {json_ext} > DS_{group_name}_LL_4TCP_LL.{file_ext} &",
+                    "wait"
+                ],
+                "DS_STVA": [
+                    f"iperf3-darwin -c {self.client_ip} -p 5201 --dscp 32 -C cubic -t 60 {json_ext} > DS_{group_name}_STVA_1TCP_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} -p 5202 -S 0x81 -t 60 {json_ext} > DS_{group_name}_STVA_1TCP_LL.{file_ext} &",
+                    "wait"
+                ],
+                "DS_STVA_ECT1": [
+                    f"iperf3-darwin -c {self.client_ip} -p 5201 -C cubic -t 60 {json_ext} > DS_{group_name}_STVA_ECT1_1TCP_CL.{file_ext} &",
+                    f"iperf3-darwin -c {self.client_ip} -p 5202 -S 0x01 -t 60 {json_ext} > DS_{group_name}_STVA_ECT1_1TCP_LL.{file_ext} &",
+                    "wait"
+                ],
+                "US_1000_Packets": [
+                    f"iperf3-darwin -c {self.server_ip} -u -l 1400 -n 1400000 -b 10M -p 9202 {json_ext} > US_{group_name}_1000pkt_UDP.{file_ext} &",
+                    "wait"
+                ],
+                "DS_1000_Packets": [
+                    f"iperf3-darwin -c {self.client_ip} -u -l 1400 -n 1400000 -b 10M -p 9202 {json_ext} > DS_{group_name}_1000pkt_UDP.{file_ext} &",
                     "wait"
                 ]
             }
-            # macOS uses different server ports
-            self.server_ports = config.iperf3_macos_ports
+            # macOS uses different server ports - add STVA ports
+            self.server_ports = config.iperf3_macos_ports + [5201, 5202]
         else:
             # Linux commands using standard iperf3 with TCP and Prague
             self.scenario_commands = {
                 "US_Combined": [
-                    f"iperf3 -c {self.server_ip} -t 30 -p 9210 -P 4 -C cubic {json_ext} > US_{group_name}_Combined_4TCP_CL.{file_ext} &",
-                    f"iperf3 -c {self.server_ip} -t 30 -p 9205 -P 1 -C prague {json_ext} > US_{group_name}_Combined_1TCP_LL.{file_ext} &",
-                    f"iperf3 -c {self.server_ip} -t 30 -u -b 0.82M -p 9202 -P 1 {json_ext} > US_{group_name}_Combined_1UDP_CL.{file_ext} &",
-                    f"iperf3 -c {self.server_ip} -t 30 -u -b 0.82M -p 9206 -P 1 --dscp 45 {json_ext} > US_{group_name}_Combined_1UDP_LL.{file_ext} &",
+                    f"iperf3 -c {self.server_ip} -t 60 -p 9210 -P 4 -C cubic {json_ext} > US_{group_name}_Combined_4TCP_CL.{file_ext} &",
+                    f"iperf3 -c {self.server_ip} -t 60 -p 9205 -P 1 -C prague {json_ext} > US_{group_name}_Combined_1TCP_LL.{file_ext} &",
+                    f"iperf3 -c {self.server_ip} -t 60 -u -b 0.82M -p 9202 -P 1 {json_ext} > US_{group_name}_Combined_1UDP_CL.{file_ext} &",
+                    f"iperf3 -c {self.server_ip} -t 60 -u -b 0.82M -p 9206 -P 1 --dscp 45 {json_ext} > US_{group_name}_Combined_1UDP_LL.{file_ext} &",
                     "wait"
                 ],
                 "US_Classic_Only": [
-                    f"iperf3 -c {self.server_ip} -t 30 -p 9210 -P 4 -C cubic {json_ext} > US_{group_name}_Classic_Only_4TCP_CL.{file_ext} &",
-                    f"iperf3 -c {self.server_ip} -t 30 -u -b 0.82M -p 9202 -P 1 {json_ext} > US_{group_name}_Classic_Only_1UDP_CL.{file_ext} &",
+                    f"iperf3 -c {self.server_ip} -t 60 -p 9210 -P 4 -C cubic {json_ext} > US_{group_name}_Classic_Only_4TCP_CL.{file_ext} &",
+                    f"iperf3 -c {self.server_ip} -t 60 -u -b 0.82M -p 9202 -P 1 {json_ext} > US_{group_name}_Classic_Only_1UDP_CL.{file_ext} &",
                     "wait"
                 ],
                 "US_LL_Only": [
-                    f"iperf3 -c {self.server_ip} -t 30 -p 9205 -P 1 -C prague {json_ext} > US_{group_name}_LL_Only_1TCP_LL.{file_ext} &",
-                    f"iperf3 -c {self.server_ip} -t 30 -u -b 0.82M -p 9206 -P 1 --dscp 45 {json_ext} > US_{group_name}_LL_Only_1UDP_LL.{file_ext} &",
+                    f"iperf3 -c {self.server_ip} -t 60 -p 9205 -P 1 -C prague {json_ext} > US_{group_name}_LL_Only_1TCP_LL.{file_ext} &",
+                    f"iperf3 -c {self.server_ip} -t 60 -u -b 0.82M -p 9206 -P 1 --dscp 45 {json_ext} > US_{group_name}_LL_Only_1UDP_LL.{file_ext} &",
                     "wait"
                 ],
                 "DS_Combined": [
-                    f"iperf3 -c {self.client_ip} -t 30 -p 9210 -P 4 -C cubic {json_ext} > DS_{group_name}_Combined_4TCP_CL.{file_ext} &",
-                    f"iperf3 -c {self.client_ip} -t 30 -p 9205 -P 1 -C prague {json_ext} > DS_{group_name}_Combined_1TCP_LL.{file_ext} &",
-                    f"iperf3 -c {self.client_ip} -t 30 -u -b 0.82M -p 9202 -P 1 {json_ext} > DS_{group_name}_Combined_1UDP_CL.{file_ext} &",
-                    f"iperf3 -c {self.client_ip} -t 30 -u -b 0.82M -p 9206 -P 1 --dscp 45 {json_ext} > DS_{group_name}_Combined_1UDP_LL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -t 60 -p 9210 -P 4 -C cubic {json_ext} > DS_{group_name}_Combined_4TCP_CL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -t 60 -p 9205 -P 1 -C prague {json_ext} > DS_{group_name}_Combined_1TCP_LL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -t 60 -u -b 0.82M -p 9202 -P 1 {json_ext} > DS_{group_name}_Combined_1UDP_CL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -t 60 -u -b 0.82M -p 9206 -P 1 --dscp 45 {json_ext} > DS_{group_name}_Combined_1UDP_LL.{file_ext} &",
                     "wait"
                 ],
                 "DS_Classic_Only": [
-                    f"iperf3 -c {self.client_ip} -t 30 -p 9210 -P 4 -C cubic {json_ext} > DS_{group_name}_Classic_Only_4TCP_CL.{file_ext} &",
-                    f"iperf3 -c {self.client_ip} -t 30 -u -b 0.82M -p 9202 -P 1 {json_ext} > DS_{group_name}_Classic_Only_1UDP_CL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -t 60 -p 9210 -P 4 -C cubic {json_ext} > DS_{group_name}_Classic_Only_4TCP_CL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -t 60 -u -b 0.82M -p 9202 -P 1 {json_ext} > DS_{group_name}_Classic_Only_1UDP_CL.{file_ext} &",
                     "wait"
                 ],
                 "DS_LL_Only": [
-                    f"iperf3 -c {self.client_ip} -t 30 -p 9205 -P 1 -C prague {json_ext} > DS_{group_name}_LL_Only_1TCP_LL.{file_ext} &",
-                    f"iperf3 -c {self.client_ip} -t 30 -u -b 0.82M -p 9206 -P 1 --dscp 45 {json_ext} > DS_{group_name}_LL_Only_1UDP_LL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -t 60 -p 9205 -P 1 -C prague {json_ext} > DS_{group_name}_LL_Only_1TCP_LL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -t 60 -u -b 0.82M -p 9206 -P 1 --dscp 45 {json_ext} > DS_{group_name}_LL_Only_1UDP_LL.{file_ext} &",
                     "wait"
                 ],
                 "US_UDP_NC": [
-                    f"iperf3 -c {self.server_ip} -t 30 -u -b 0.82M -p 9202 -P 1 {json_ext} > US_{group_name}_UDP_NC.{file_ext} &",
+                    f"iperf3 -c {self.server_ip} -t 60 -u -b 0.82M -p 9202 -P 1 {json_ext} > US_{group_name}_UDP_NC.{file_ext} &",
                     "wait"
                 ],
                 "DS_UDP_NC": [
-                    f"iperf3 -c {self.client_ip} -t 30 -u -b 0.82M -p 9202 -P 1 {json_ext} > DS_{group_name}_UDP_NC.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -t 60 -u -b 0.82M -p 9202 -P 1 {json_ext} > DS_{group_name}_UDP_NC.{file_ext} &",
                     "wait"
                 ],
                 "US_LL_1TCP_LL": [
-                    f"iperf3 -c {self.server_ip} -t 30 -p 9205 -P 1 -C prague -J > US_{group_name}_LL_1TCP_LL.json &",
+                    f"iperf3 -c {self.server_ip} -t 60 -p 9205 -P 1 -C prague {json_ext} > US_{group_name}_LL_1TCP_LL.{file_ext} &",
                     "wait"
                 ],
                 "US_LL_4TCP_LL": [
-                    f"iperf3 -c {self.server_ip} -t 30 -p 9205 -P 4 -C prague -J > US_{group_name}_LL_4TCP_LL.json &",
+                    f"iperf3 -c {self.server_ip} -t 60 -p 9205 -P 4 -C prague {json_ext} > US_{group_name}_LL_4TCP_LL.{file_ext} &",
                     "wait"
                 ],
                 "DS_LL_1TCP_LL": [
-                    f"iperf3 -c {self.client_ip} -t 30 -p 9205 -P 1 -C prague -J > DS_{group_name}_LL_1TCP_LL.json &",
+                    f"iperf3 -c {self.client_ip} -t 60 -p 9205 -P 1 -C prague {json_ext} > DS_{group_name}_LL_1TCP_LL.{file_ext} &",
+                    "wait"
+                ],
+                "DS_LL_4TCP_LL": [
+                    f"iperf3 -c {self.client_ip} -t 60 -p 9205 -P 4 -C prague {json_ext} > DS_{group_name}_LL_4TCP_LL.{file_ext} &",
                     "wait"
                 ],
                 "DS_STVA": [
-                    f"iperf3 -c {self.client_ip} -p 5201 --dscp 32 -C cubic -t 30 -J > DS_{group_name}_STVA_1TCP_CL.json &",
-                    f"iperf3 -c {self.client_ip} -p 5202 -S 0x81 -t 30 -J > DS_{group_name}_STVA_1TCP_LL.json &",
-                    f"ping -i 0.1 -c 300 -Q 0x81 {self.client_ip} > DS_{group_name}_STVA_ping_latency.txt &",
+                    f"iperf3 -c {self.client_ip} -p 5201 --dscp 32 -C cubic -t 60 {json_ext} > DS_{group_name}_STVA_1TCP_CL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -p 5202 -S 0x81 -t 60 {json_ext} > DS_{group_name}_STVA_1TCP_LL.{file_ext} &",
                     "wait"
                 ],
                 "DS_STVA_ECT1": [
-                    f"iperf3 -c {self.client_ip} -p 5201 -C cubic -t 30 -J > DS_{group_name}_STVA_ECT1_1TCP_CL.json &",
-                    f"iperf3 -c {self.client_ip} -p 5202 -S 0x01 -t 30 -J > DS_{group_name}_STVA_ECT1_1TCP_LL.json &",
+                    f"iperf3 -c {self.client_ip} -p 5201 -C cubic -t 60 {json_ext} > DS_{group_name}_STVA_ECT1_1TCP_CL.{file_ext} &",
+                    f"iperf3 -c {self.client_ip} -p 5202 -S 0x01 -t 60 {json_ext} > DS_{group_name}_STVA_ECT1_1TCP_LL.{file_ext} &",
+                    "wait"
+                ],
+                "US_1000_Packets": [
+                    f"iperf3 -c {self.server_ip} -u -l 1400 -n 1400000 -b 10M -p 9202 {json_ext} > US_{group_name}_1000pkt_UDP.{file_ext} &",
+                    "wait"
+                ],
+                "DS_1000_Packets": [
+                    f"iperf3 -c {self.client_ip} -u -l 1400 -n 1400000 -b 10M -p 9202 {json_ext} > DS_{group_name}_1000pkt_UDP.{file_ext} &",
                     "wait"
                 ]
             }
-            # Linux uses different server ports
-            self.server_ports = config.iperf3_linux_ports
+            # Linux uses different server ports - add STVA ports
+            self.server_ports = config.iperf3_linux_ports + [5201, 5202]
     
     def _ssh_command(self, command):
         """Execute SSH command using key authentication with password fallback"""
@@ -602,7 +637,7 @@ class IPerf3Logic:
                 processes.append(proc)
             
             # Wait for all processes to complete with progress
-            self.logger.info(f"Test running (30s duration)...")
+            self.logger.info(f"Test running (60s duration)...")
             print(f"\n[{self.scenario_name}] Test in progress...", flush=True)
             for idx, proc in enumerate(processes, 1):
                 stdout, stderr = proc.communicate()
