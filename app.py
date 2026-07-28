@@ -61,7 +61,7 @@ swagger_template = {
 
 For issues or questions, visit the [GitHub repository](https://github.com/birdyphillips/netperf-api).
 """,
-        "version": "2.0.0",
+        "version": "1.4.0",
         "contact": {
             "name": "birdyphillips",
             "url": "https://github.com/birdyphillips/netperf-api"
@@ -87,6 +87,32 @@ modem_cm_mac = None
 running_tests = {}  # Store test status
 result_registry = {}  # Map result_id to folder path
 cmts_collectors = {}  # Active CMTS Kafka collectors by test_id
+
+
+def _lookup_ipv6_local(mac_normalized):
+    """Run 'scm <mac> ip' locally and parse the IPv6 address.
+    mac_normalized: dotted format e.g. 802b.f9fa.ee17
+    Returns IPv6 string or None.
+    """
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["scm", mac_normalized, "ip"],
+            capture_output=True, text=True, timeout=15
+        )
+        output = result.stdout + result.stderr
+        from cmts_modem_info import parse_ipv6_from_vcmts
+        ipv6 = parse_ipv6_from_vcmts(output)
+        if ipv6:
+            logger.info(f"Auto-detected IPv6 via scm: {ipv6}")
+        return ipv6
+    except FileNotFoundError:
+        logger.warning("'scm' command not found — falling back to SSH lookup")
+    except subprocess.TimeoutExpired:
+        logger.warning("scm lookup timed out — falling back to SSH lookup")
+    except Exception as e:
+        logger.warning(f"scm lookup failed: {e} — falling back to SSH lookup")
+    return None
 
 
 def _start_cmts_collection(test_id, scenario, output_dir):
@@ -377,8 +403,14 @@ def get_cmts_modem_info():
     
     try:
         logger.info(f"Collecting {cmts_type.upper()} modem info for {cm_mac_normalized} from {cmts_host}")
-        cm_ipv6 = collect_cmts_data(cmts_host, cm_mac_normalized, cmts_type, output_dir="Results")
-        
+
+        # Try local scm command first (fast path)
+        cm_ipv6 = _lookup_ipv6_local(cm_mac_normalized)
+
+        # Fall back to SSH-based collection if local lookup failed
+        if not cm_ipv6:
+            cm_ipv6 = collect_cmts_data(cmts_host, cm_mac_normalized, cmts_type, output_dir="Results")
+
         if cm_ipv6:
             global modem_ipv6, modem_cm_mac
             modem_ipv6 = cm_ipv6
