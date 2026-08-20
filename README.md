@@ -1,11 +1,13 @@
-# NetPerf API v2.1
+# DELTA-API v2.1
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![Flask](https://img.shields.io/badge/Flask-3.0%2B-green.svg)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![GitHub](https://img.shields.io/badge/GitHub-netperf--api-black.svg)](https://github.com/birdyphillips/netperf-api)
+[![GitHub](https://img.shields.io/badge/GitHub-delta--docsis--api-black.svg)](https://github.com/birdyphillips/delta-docsis-api)
 
-REST API for automated DOCSIS 3.1 and 4.0 network performance testing with ByteBlower, iPerf3, PacketStorm, and SpeedTest. Provides HTTP endpoints for running comprehensive network tests with SNMP monitoring, RTT configuration, and multi-scenario support.
+REST API for automated DOCSIS 3.1 and 4.0 network performance testing with ByteBlower, iPerf3, PacketStorm, and SpeedTest.
+
+> DELTA-API — DOCSIS Enhanced Latency & Throughput Analyzer REST API
 
 ## 🚀 Features
 
@@ -1000,7 +1002,7 @@ Returns before/after/delta values for all metrics per iteration.
 
 ### Installation
 ```bash
-git clone git@github.com:birdyphillips/netperf-api.git
+git clone git@github.com:birdyphillips/delta-docsis-api.git
 cd netperf-api
 pip install -r requirements.txt
 cp config.yaml.example config.yaml
@@ -1163,7 +1165,7 @@ MIT License - see LICENSE file for details
 
 **birdyphillips**
 - GitHub: [@birdyphillips](https://github.com/birdyphillips)
-- Repository: [netperf-api](https://github.com/birdyphillips/netperf-api)
+- Repository: [delta-docsis-api](https://github.com/birdyphillips/delta-docsis-api)
 
 ---
 

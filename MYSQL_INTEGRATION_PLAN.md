@@ -1,4 +1,4 @@
-# MySQL Database Integration Plan
+# DELTA-API - MySQL Integration Plan
 
 ## Overview
 
@@ -145,14 +145,14 @@ Parsed iPerf3 JSON result fields.
 - After SCP of results from remote host, parse `.json` files
 - Insert per-stream metrics into `iperf3_results`
 
-### netperf_orchestrator.py / app.py
+### delta_orchestrator.py / app.py
 - Create `test_runs` record at test start (status=running)
 - Update status to completed/failed at end
 - Pass test_run_id down to all sub-modules for FK linkage
 
 ---
 
-## Phase 4: API Endpoints (netperf_api only)
+## Phase 4: API Endpoints (DELTA-API only)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -177,16 +177,16 @@ mysql-connector-python>=8.0
 mysql:
   host: localhost
   port: 3306
-  user: netperf
+  user: delta
   password: <password>
-  database: netperf
+  database: delta
 ```
 
 ### MySQL server setup
 ```sql
-CREATE DATABASE netperf;
-CREATE USER 'netperf'@'localhost' IDENTIFIED BY '<password>';
-GRANT ALL PRIVILEGES ON netperf.* TO 'netperf'@'localhost';
+CREATE DATABASE delta;
+CREATE USER 'delta'@'localhost' IDENTIFIED BY '<password>';
+GRANT ALL PRIVILEGES ON delta.* TO 'delta'@'localhost';
 FLUSH PRIVILEGES;
 ```
 

@@ -1,359 +1,908 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NetPerf API - Interactive Documentation</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fafafa; }
-        .header { background: #1b1b1b; color: white; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .header h1 { font-size: 24px; margin-bottom: 5px; }
-        .header p { color: #aaa; font-size: 14px; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .section { background: white; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .section-header { background: #f7f7f7; padding: 15px 20px; border-bottom: 1px solid #e8e8e8; font-weight: 600; font-size: 16px; }
-        .endpoint { border-bottom: 1px solid #e8e8e8; }
-        .endpoint:last-child { border-bottom: none; }
-        .endpoint-summary { padding: 15px 20px; cursor: pointer; display: flex; align-items: center; gap: 15px; transition: background 0.2s; }
-        .endpoint-summary:hover { background: #f9f9f9; }
-        .method { padding: 5px 10px; border-radius: 4px; font-weight: 600; font-size: 12px; text-transform: uppercase; min-width: 60px; text-align: center; }
-        .method.get { background: #61affe; color: white; }
-        .method.post { background: #49cc90; color: white; }
-        .path { flex: 1; font-family: monospace; color: #3b4151; }
-        .description { color: #666; font-size: 14px; }
-        .endpoint-details { display: none; padding: 20px; background: #fafafa; border-top: 1px solid #e8e8e8; }
-        .endpoint-details.active { display: block; }
-        .params { margin-bottom: 20px; }
-        .params h4 { margin-bottom: 10px; font-size: 14px; }
-        .param { background: white; padding: 10px; margin-bottom: 8px; border-radius: 4px; border: 1px solid #e8e8e8; }
-        .param-name { font-weight: 600; color: #3b4151; margin-bottom: 5px; }
-        .param-type { color: #666; font-size: 12px; }
-        .try-it { background: white; padding: 15px; border-radius: 4px; border: 1px solid #e8e8e8; }
-        .try-it h4 { margin-bottom: 10px; font-size: 14px; }
-        textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 13px; min-height: 150px; }
-        input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 13px; margin-bottom: 10px; }
-        button { background: #4990e2; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: 600; }
-        button:hover { background: #357abd; }
-        .response { margin-top: 15px; }
-        .response pre { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 13px; }
-        .config-section { background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-        .config-section h3 { color: #856404; margin-bottom: 10px; font-size: 16px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DELTA</title>
+  <style>
+    :root {
+      --bg:       #0d0f18;
+      --surface:  #151824;
+      --surface2: #1c2033;
+      --surface3: #232740;
+      --border:   #2a2f4a;
+      --accent:   #4f8ef7;
+      --green:    #3ecf8e;
+      --yellow:   #f7c948;
+      --red:      #f75f5f;
+      --purple:   #a78bfa;
+      --text:     #e2e8f0;
+      --muted:    #6b7280;
+      --radius:   10px;
+      --sw:       240px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;min-height:100vh;font-size:14px;}
+
+    /* ── Header ── */
+    header{background:var(--surface);border-bottom:1px solid var(--border);height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:200;}
+    .brand{font-size:20px;font-weight:800;letter-spacing:-0.5px;}
+    .brand em{color:var(--accent);font-style:normal;}
+    .hdr-right{display:flex;align-items:center;gap:12px;}
+    .pill{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--muted);}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .3s;}
+    .dot.on{background:var(--green);}
+    .dot.off{background:var(--red);}
+    #baseUrl{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:monospace;font-size:12px;padding:5px 10px;outline:none;width:240px;}
+    #baseUrl:focus{border-color:var(--accent);}
+
+    /* ── Layout ── */
+    .layout{display:flex;flex:1;}
+
+    /* ── Sidebar ── */
+    nav{width:var(--sw);background:var(--surface);border-right:1px solid var(--border);padding:16px 0;position:sticky;top:58px;height:calc(100vh - 58px);overflow-y:auto;flex-shrink:0;}
+    .nav-section{margin-bottom:4px;}
+    .nav-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:14px 20px 6px;}
+    .nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;font-size:13px;color:var(--muted);cursor:pointer;border-left:2px solid transparent;transition:all .15s;user-select:none;}
+    .nav-item:hover{color:var(--text);background:var(--surface2);}
+    .nav-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(79,142,247,.08);}
+    .nav-item .icon{font-size:15px;width:18px;text-align:center;}
+    .nav-badge{margin-left:auto;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;display:none;}
+    .nav-badge.show{display:block;}
+
+    /* ── Main ── */
+    main{flex:1;padding:28px 32px;max-width:960px;}
+
+    /* ── Page sections ── */
+    .page{display:none;}
+    .page.active{display:block;}
+
+    /* ── Page header ── */
+    .page-title{font-size:22px;font-weight:700;margin-bottom:4px;}
+    .page-sub{color:var(--muted);font-size:13px;margin-bottom:24px;}
+
+    /* ── Cards ── */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;}
+    .card-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:16px;}
+
+    /* ── Form grid ── */
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    .form-grid.cols3{grid-template-columns:1fr 1fr 1fr;}
+    .form-grid.col1{grid-template-columns:1fr;}
+    .field{display:flex;flex-direction:column;gap:5px;}
+    .field.span2{grid-column:span 2;}
+    .field label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);}
+    .field input,.field select,.field textarea{background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:8px 12px;outline:none;transition:border-color .15s;font-family:inherit;}
+    .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);}
+    .field textarea{resize:vertical;min-height:80px;font-family:monospace;}
+    .field select option{background:var(--surface2);}
+    .hint{font-size:11px;color:var(--muted);margin-top:2px;}
+
+    /* ── Checkbox group ── */
+    .check-group{display:flex;flex-wrap:wrap;gap:8px;}
+    .check-item{display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;transition:all .15s;user-select:none;font-size:13px;}
+    .check-item:hover{border-color:var(--accent);}
+    .check-item.checked{background:rgba(79,142,247,.12);border-color:var(--accent);color:var(--accent);}
+    .check-item input{display:none;}
+
+    /* ── Toggle ── */
+    .toggle-row{display:flex;gap:6px;}
+    .toggle-btn{flex:1;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s;}
+    .toggle-btn.active{background:rgba(79,142,247,.15);border-color:var(--accent);color:var(--accent);}
+
+    /* ── Buttons ── */
+    .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 20px;border-radius:7px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;}
+    .btn:hover{opacity:.88;}
+    .btn:disabled{opacity:.35;cursor:not-allowed;}
+    .btn-primary{background:var(--accent);color:#fff;}
+    .btn-green{background:var(--green);color:#0d0f18;}
+    .btn-red{background:var(--red);color:#fff;}
+    .btn-ghost{background:var(--surface2);border:1px solid var(--border);color:var(--text);}
+    .btn-sm{padding:5px 12px;font-size:12px;}
+    .btn-row{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap;}
+
+    /* ── Status / badges ── */
+    .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+    .badge-green{background:rgba(62,207,142,.15);color:var(--green);}
+    .badge-yellow{background:rgba(247,201,72,.15);color:var(--yellow);}
+    .badge-red{background:rgba(247,95,95,.15);color:var(--red);}
+    .badge-blue{background:rgba(79,142,247,.15);color:var(--accent);}
+    .badge-muted{background:var(--surface2);color:var(--muted);}
+
+    /* ── Alert ── */
+    .alert{padding:12px 16px;border-radius:7px;font-size:13px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;}
+    .alert-info{background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.3);color:#93c5fd;}
+    .alert-success{background:rgba(62,207,142,.1);border:1px solid rgba(62,207,142,.3);color:#6ee7b7;}
+    .alert-warn{background:rgba(247,201,72,.1);border:1px solid rgba(247,201,72,.3);color:#fde68a;}
+    .alert-error{background:rgba(247,95,95,.1);border:1px solid rgba(247,95,95,.3);color:#fca5a5;}
+
+    /* ── Progress / spinner ── */
+    .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .progress-bar{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;margin-top:10px;}
+    .progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s;}
+
+    /* ── Response pre ── */
+    pre.resp{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:14px;font-size:12px;overflow:auto;max-height:360px;white-space:pre-wrap;word-break:break-word;color:var(--text);margin-top:12px;display:none;}
+    pre.resp.show{display:block;}
+
+    /* ── Table ── */
+    .tbl{width:100%;border-collapse:collapse;font-size:13px;}
+    .tbl th{text-align:left;padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);}
+    .tbl td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+    .tbl tr:last-child td{border-bottom:none;}
+    .tbl tr:hover td{background:var(--surface2);}
+
+    /* ── Divider ── */
+    hr.div{border:none;border-top:1px solid var(--border);margin:18px 0;}
+
+    /* ── Step indicator ── */
+    .steps{display:flex;align-items:center;gap:0;margin-bottom:24px;}
+    .step{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);}
+    .step.done .step-num{background:var(--green);color:#0d0f18;}
+    .step.active .step-num{background:var(--accent);color:#fff;}
+    .step-num{width:26px;height:26px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
+    .step-line{flex:1;height:1px;background:var(--border);margin:0 8px;}
+    .step.done .step-line{background:var(--green);}
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar{width:5px;height:5px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+    /* ── Responsive ── */
+    @media(max-width:700px){
+      nav{display:none;}
+      .form-grid{grid-template-columns:1fr;}
+      .field.span2{grid-column:span 1;}
+    }
+  </style>
 </head>
 <body>
-    <div class="header">
-        <div class="container">
-            <h1>NetPerf API v2.0</h1>
-            <p>Interactive API Documentation - Network Performance Testing | <a href="https://github.com/birdyphillips/netperf-api" style="color: #61affe; text-decoration: none;">📖 README</a> | <a href="https://github.com/birdyphillips/netperf-api#-usage-examples" style="color: #49cc90; text-decoration: none;">💡 Usage Examples</a></p>
-        </div>
+
+<header>
+  <div class="brand">DELTA</div>
+  <div class="hdr-right">
+    <input id="baseUrl" type="text" value="http://24.28.218.10:5000" placeholder="http://host:5000">
+    <div class="pill">
+      <div class="dot" id="hDot"></div>
+      <span id="hTxt">checking...</span>
     </div>
+  </div>
+</header>
 
-    <div class="container">
-        <div class="config-section">
-            <h3>⚙️ Configuration</h3>
-            <label>Base URL:</label>
-            <input type="text" id="baseUrl" value="http://24.28.218.10:5000" placeholder="http://localhost:5000">
-            <label>Modem IPv6 (for SNMP):</label>
-            <input type="text" id="modemIpv6" value="2605:1c00:50f2:203:a49d:6fa2:3d34:7329" placeholder="2605:1c00:50f2:203:a49d:6fa2:3d34:7329">
-        </div>
-
-        <!-- Health & Configuration -->
-        <div class="section">
-            <div class="section-header">Health & Configuration</div>
-            
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method get">GET</span>
-                    <span class="path">/health</span>
-                    <span class="description">Health check</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <h4>Try it out</h4>
-                        <button onclick="executeRequest('GET', '/health', null, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/config/modem</span>
-                    <span class="description">Set modem IPv6 for SNMP</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="params">
-                        <h4>Request Body</h4>
-                        <div class="param">
-                            <div class="param-name">ipv6</div>
-                            <div class="param-type">string (required) - Modem IPv6 address</div>
-                        </div>
-                    </div>
-                    <div class="try-it">
-                        <h4>Request Body</h4>
-                        <textarea class="request-body">{"ipv6": "2605:1c00:50f2:203:a49d:6fa2:3d34:7329"}</textarea>
-                        <button onclick="executeRequest('POST', '/api/config/modem', this.previousElementSibling, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Test Execution -->
-        <div class="section">
-            <div class="section-header">Test Execution</div>
-            
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/byteblower/run</span>
-                    <span class="description">Run ByteBlower test</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="params">
-                        <h4>Request Body</h4>
-                        <div class="param">
-                            <div class="param-name">bbp_file, scenario, test_group_name</div>
-                            <div class="param-type">required | iterations, rtt_config, async - optional</div>
-                        </div>
-                    </div>
-                    <div class="try-it">
-                        <h4>Request Body</h4>
-                        <textarea class="request-body">{
-  "bbp_file": "Port_20_example.bbp",
-  "scenario": "US_Classic_Only",
-  "test_group_name": "TEST_SCN_RTT_0",
-  "iterations": 1,
-  "rtt_config": "",
-  "async": false
-}</textarea>
-                        <button onclick="executeRequest('POST', '/api/byteblower/run', this.previousElementSibling, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/iperf3/run</span>
-                    <span class="description">Run iPerf3 test</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="params">
-                        <h4>Request Body</h4>
-                        <div class="param">
-                            <div class="param-name">client_ip, scenario, test_group_name</div>
-                            <div class="param-type">required | platform: linux/macos, iterations, rtt_config - optional</div>
-                        </div>
-                    </div>
-                    <div class="try-it">
-                        <h4>Request Body</h4>
-                        <textarea class="request-body">{
-  "client_ip": "96.37.176.19",
-  "scenario": "US_Classic_Only",
-  "test_group_name": "TEST_SCN_RTT_0",
-  "iterations": 1,
-  "platform": "linux",
-  "rtt_config": ""
-}</textarea>
-                        <button onclick="executeRequest('POST', '/api/iperf3/run', this.previousElementSibling, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/speedtest/run</span>
-                    <span class="description">Run SpeedTest</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <h4>Request Body</h4>
-                        <textarea class="request-body">{
-  "clients": ["linux", "macos", "nvidia"],
-  "test_group_name": "Speedtest",
-  "iterations": 1
-}</textarea>
-                        <button onclick="executeRequest('POST', '/api/speedtest/run', this.previousElementSibling, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/packetstorm/start</span>
-                    <span class="description">Start PacketStorm RTT</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <h4>Request Body</h4>
-                        <textarea class="request-body">{"rtt_config": "vcmts10ms.json"}</textarea>
-                        <button onclick="executeRequest('POST', '/api/packetstorm/start', this.previousElementSibling, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/packetstorm/stop</span>
-                    <span class="description">Stop PacketStorm RTT</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <h4>Request Body</h4>
-                        <textarea class="request-body">{"rtt_config": "vcmts10ms.json"}</textarea>
-                        <button onclick="executeRequest('POST', '/api/packetstorm/stop', this.previousElementSibling, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Results -->
-        <div class="section">
-            <div class="section-header">Results Management</div>
-            
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method get">GET</span>
-                    <span class="path">/api/results</span>
-                    <span class="description">List all results</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <button onclick="executeRequest('GET', '/api/results', null, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method get">GET</span>
-                    <span class="path">/api/results/{result_id}</span>
-                    <span class="description">Get result files</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <h4>Parameters</h4>
-                        <input type="text" class="param-input" placeholder="result_id (UUID)">
-                        <button onclick="executeRequest('GET', '/api/results/' + this.previousElementSibling.value, null, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method get">GET</span>
-                    <span class="path">/api/results/{result_id}/snmp</span>
-                    <span class="description">Get SNMP analysis</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <h4>Parameters</h4>
-                        <input type="text" class="param-input" placeholder="result_id (UUID)">
-                        <button onclick="executeRequest('GET', '/api/results/' + this.previousElementSibling.value + '/snmp', null, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Test Management -->
-        <div class="section">
-            <div class="section-header">Test Management</div>
-            
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method get">GET</span>
-                    <span class="path">/api/test/list</span>
-                    <span class="description">List all tests</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <button onclick="executeRequest('GET', '/api/test/list', null, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method get">GET</span>
-                    <span class="path">/api/test/status/{test_id}</span>
-                    <span class="description">Get test status</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <h4>Parameters</h4>
-                        <input type="text" class="param-input" placeholder="test_id (UUID)">
-                        <button onclick="executeRequest('GET', '/api/test/status/' + this.previousElementSibling.value, null, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Resources -->
-        <div class="section">
-            <div class="section-header">Resources</div>
-            
-            <div class="endpoint">
-                <div class="endpoint-summary" onclick="toggleEndpoint(this)">
-                    <span class="method get">GET</span>
-                    <span class="path">/api/bb_flows</span>
-                    <span class="description">List ByteBlower flows</span>
-                </div>
-                <div class="endpoint-details">
-                    <div class="try-it">
-                        <button onclick="executeRequest('GET', '/api/bb_flows', null, this)">Execute</button>
-                        <div class="response"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="layout">
+  <nav id="sidebar">
+    <div class="nav-section">
+      <div class="nav-label">Setup</div>
+      <div class="nav-item active" data-page="setup"><span class="icon">🔧</span> Modem Setup</div>
     </div>
+    <div class="nav-section">
+      <div class="nav-label">Run Tests</div>
+      <div class="nav-item" data-page="byteblower"><span class="icon">📡</span> ByteBlower</div>
+      <div class="nav-item" data-page="iperf3"><span class="icon">⚡</span> iPerf3</div>
+      <div class="nav-item" data-page="packetstorm"><span class="icon">🌩️</span> PacketStorm</div>
+      <div class="nav-item" data-page="speedtest"><span class="icon">🚀</span> SpeedTest</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Monitor</div>
+      <div class="nav-item" data-page="monitor"><span class="icon">📊</span> Active Tests <span class="nav-badge" id="badge-monitor">0</span></div>
+      <div class="nav-item" data-page="results"><span class="icon">📁</span> Results</div>
+    </div>
+  </nav>
 
-    <script>
-        function toggleEndpoint(element) {
-            const details = element.nextElementSibling;
-            details.classList.toggle('active');
-        }
+  <main>
+    <!-- pages injected below -->
+    <div id="page-setup"      class="page active"></div>
+    <div id="page-byteblower" class="page"></div>
+    <div id="page-iperf3"     class="page"></div>
+    <div id="page-packetstorm"class="page"></div>
+    <div id="page-speedtest"  class="page"></div>
+    <div id="page-monitor"    class="page"></div>
+    <div id="page-results"    class="page"></div>
+  </main>
+</div>
 
-        async function executeRequest(method, path, bodyElement, buttonElement) {
-            const baseUrl = document.getElementById('baseUrl').value;
-            const url = baseUrl + path;
-            const responseDiv = buttonElement.nextElementSibling;
-            
-            const options = {
-                method: method,
-                headers: {'Content-Type': 'application/json'}
-            };
+<script>
+// ── Globals ──
+const base = () => document.getElementById('baseUrl').value.replace(/\/$/, '');
+let modemState = { ipv6: '', cm_mac: '' };
 
-            if (bodyElement && bodyElement.value) {
-                options.body = bodyElement.value;
-            }
+// ── Navigation ──
+document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + el.dataset.page).classList.add('active');
+  });
+});
 
-            responseDiv.innerHTML = '<pre>Loading...</pre>';
+function goPage(name) {
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+  const nav = document.querySelector(`.nav-item[data-page="${name}"]`);
+  if (nav) nav.classList.add('active');
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+}
 
-            try {
-                const response = await fetch(url, options);
-                const data = await response.json();
-                responseDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-            } catch (error) {
-                responseDiv.innerHTML = `<pre style="color: #f44336;">Error: ${error.message}</pre>`;
-            }
-        }
-    </script>
+// ── Health check ──
+async function checkHealth() {
+  try {
+    const r = await fetch(base() + '/health', { signal: AbortSignal.timeout(4000) });
+    const dot = document.getElementById('hDot');
+    const txt = document.getElementById('hTxt');
+    if (r.ok) { dot.className = 'dot on'; txt.textContent = 'online'; }
+    else       { dot.className = 'dot off'; txt.textContent = 'error'; }
+  } catch {
+    document.getElementById('hDot').className = 'dot off';
+    document.getElementById('hTxt').textContent = 'offline';
+  }
+}
+checkHealth();
+setInterval(checkHealth, 20000);
+
+// ── API helper ──
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(base() + path, opts);
+  const data = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data };
+}
+
+// ── Alert helper ──
+function mkAlert(type, msg) {
+  const icons = { info:'ℹ️', success:'✅', warn:'⚠️', error:'❌' };
+  return `<div class="alert alert-${type}"><span>${icons[type]||'ℹ️'}</span><span>${msg}</span></div>`;
+}
+
+// ── Check-group helper ──
+function mkChecks(id, items, multi=true) {
+  return items.map(v =>
+    `<label class="check-item" onclick="toggleCheck(this,'${id}',${multi})">
+      <input type="checkbox" value="${v}">${v}
+    </label>`
+  ).join('');
+}
+function toggleCheck(el, groupId, multi) {
+  if (!multi) {
+    document.querySelectorAll(`#${groupId} .check-item`).forEach(i => i.classList.remove('checked'));
+  }
+  el.classList.toggle('checked');
+  el.querySelector('input').checked = el.classList.contains('checked');
+}
+function getChecked(groupId) {
+  return [...document.querySelectorAll(`#${groupId} .check-item.checked`)].map(el => el.querySelector('input').value);
+}
+
+// ── Spinner button state ──
+function setBusy(btnId, busy, label='Run Test') {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = busy;
+  btn.innerHTML = busy ? `<div class="spinner"></div> Running...` : label;
+}
+
+// ── Show response ──
+function showResp(preId, data) {
+  const el = document.getElementById(preId);
+  if (!el) return;
+  el.textContent = JSON.stringify(data, null, 2);
+  el.classList.add('show');
+}
+</script>
+
+<!-- PAGE CONTENT SCRIPTS -->
+<script id="page-scripts">
+</script>
+
+<script>
+// ── MODEM SETUP PAGE ──
+document.getElementById('page-setup').innerHTML = [
+  '<div class="page-title">Modem Setup</div>',
+  '<div class="page-sub">Look up a cable modem on the CMTS to auto-configure IPv6 for testing.</div>',
+
+  '<div class="card">',
+    '<div class="card-title">CMTS Lookup</div>',
+    '<div class="form-grid">',
+      '<div class="field"><label>CMTS Host</label>',
+        '<select id="s-cmts">',
+          '<option value="apc01k1dccc">apc01k1dccc (vCMTS)</option>',
+          '<option value="cts01k1dccc">cts01k1dccc (iCMTS)</option>',
+        '</select></div>',
+      '<div class="field"><label>CM MAC Address</label>',
+        '<input id="s-mac" type="text" placeholder="206a.9492.23b8" value="206a.9492.23b8"></div>',
+    '</div>',
+    '<div class="btn-row">',
+      '<button class="btn btn-primary" id="s-lookup-btn" onclick="setupLookup()">&#128269; Lookup Modem</button>',
+    '</div>',
+    '<div id="s-alert" style="margin-top:14px"></div>',
+  '</div>',
+
+  '<div class="card" id="s-result-card" style="display:none">',
+    '<div class="card-title">Modem Found</div>',
+    '<div class="form-grid">',
+      '<div class="field"><label>IPv6 Address</label><input id="s-ipv6-found" type="text" readonly style="font-family:monospace"></div>',
+      '<div class="field"><label>CM MAC</label><input id="s-mac-found" type="text" readonly style="font-family:monospace"></div>',
+      '<div class="field"><label>CMTS Host</label><input id="s-cmts-found" type="text" readonly></div>',
+      '<div class="field"><label>CMTS Type</label><input id="s-type-found" type="text" readonly></div>',
+    '</div>',
+    '<div class="btn-row">',
+      '<button class="btn btn-green" onclick="setupApply()">&#10003; Use This Modem</button>',
+    '</div>',
+  '</div>',
+
+  '<div class="card">',
+    '<div class="card-title">Manual Override</div>',
+    '<div class="form-grid">',
+      '<div class="field span2"><label>IPv6 Address</label><input id="s-manual-ipv6" type="text" placeholder="2605:1c00:50f2:203:..."></div>',
+      '<div class="field"><label>CM MAC (optional)</label><input id="s-manual-mac" type="text" placeholder="206a.9492.23b8"></div>',
+    '</div>',
+    '<div class="btn-row"><button class="btn btn-ghost" onclick="setupManual()">Apply Manual Config</button></div>',
+    '<div id="s-manual-alert" style="margin-top:14px"></div>',
+  '</div>',
+
+  '<div class="card" id="s-status-card" style="display:none">',
+    '<div class="card-title">Active Configuration</div>',
+    '<div id="s-status-body"></div>',
+  '</div>'
+].join('');
+
+async function setupLookup() {
+  const cmts = document.getElementById('s-cmts').value;
+  const mac  = document.getElementById('s-mac').value.trim();
+  const alrt = document.getElementById('s-alert');
+  if (!mac) { alrt.innerHTML = mkAlert('warn','Enter a CM MAC address'); return; }
+  setBusy('s-lookup-btn', true, '&#128269; Lookup Modem');
+  alrt.innerHTML = '';
+  document.getElementById('s-result-card').style.display = 'none';
+  const r = await api('GET', '/api/cmts/modem/info?cmts_host=' + cmts + '&cm_mac=' + encodeURIComponent(mac));
+  setBusy('s-lookup-btn', false, '&#128269; Lookup Modem');
+  if (r.ok) {
+    document.getElementById('s-ipv6-found').value  = r.data.cm_ipv6   || '';
+    document.getElementById('s-mac-found').value   = r.data.cm_mac    || '';
+    document.getElementById('s-cmts-found').value  = r.data.cmts_host || '';
+    document.getElementById('s-type-found').value  = r.data.cmts_type || '';
+    document.getElementById('s-result-card').style.display = 'block';
+    alrt.innerHTML = mkAlert('success', 'Modem found — click "Use This Modem" to apply.');
+  } else {
+    alrt.innerHTML = mkAlert('error', r.data.error || 'Modem not found');
+  }
+}
+
+async function setupApply() {
+  const ipv6 = document.getElementById('s-ipv6-found').value;
+  const mac  = document.getElementById('s-mac-found').value;
+  const r = await api('POST', '/api/config/modem', { ipv6: ipv6, cm_mac: mac });
+  if (r.ok) {
+    modemState = { ipv6: ipv6, cm_mac: mac };
+    showActiveConfig();
+    document.getElementById('s-alert').innerHTML = mkAlert('success', 'Modem configured — ready to run tests.');
+  } else {
+    document.getElementById('s-alert').innerHTML = mkAlert('error', r.data.error || 'Config failed');
+  }
+}
+
+async function setupManual() {
+  const ipv6 = document.getElementById('s-manual-ipv6').value.trim();
+  const mac  = document.getElementById('s-manual-mac').value.trim();
+  const alrt = document.getElementById('s-manual-alert');
+  if (!ipv6) { alrt.innerHTML = mkAlert('warn','IPv6 address is required'); return; }
+  const body = { ipv6: ipv6 };
+  if (mac) body.cm_mac = mac;
+  const r = await api('POST', '/api/config/modem', body);
+  if (r.ok) {
+    modemState = { ipv6: ipv6, cm_mac: mac };
+    showActiveConfig();
+    alrt.innerHTML = mkAlert('success', 'Manual config applied.');
+  } else {
+    alrt.innerHTML = mkAlert('error', r.data.error || 'Config failed');
+  }
+}
+
+function showActiveConfig() {
+  document.getElementById('s-status-card').style.display = 'block';
+  document.getElementById('s-status-body').innerHTML = [
+    '<div class="form-grid">',
+      '<div class="field"><label>IPv6</label>',
+        '<input type="text" readonly value="' + modemState.ipv6 + '" style="font-family:monospace"></div>',
+      '<div class="field"><label>CM MAC</label>',
+        '<input type="text" readonly value="' + (modemState.cm_mac || 'not set') + '"></div>',
+    '</div>'
+  ].join('');
+}
+</script>
+
+<script>
+// ── BYTEBLOWER PAGE ──
+document.getElementById('page-byteblower').innerHTML = [
+  '<div class="page-title">ByteBlower</div>',
+  '<div class="page-sub">Run ByteBlower packet flow tests using .bbp scenario files.</div>',
+
+  '<div class="card">',
+    '<div class="card-title">Test Configuration</div>',
+    '<div class="form-grid">',
+      '<div class="field"><label>BBP File</label>',
+        '<select id="bb-file"><option value="">Loading...</option></select></div>',
+      '<div class="field"><label>Test Group Name</label>',
+        '<input id="bb-group" type="text" placeholder="TEST_SCN_RTT_0" value="TEST_SCN_RTT_0"></div>',
+      '<div class="field"><label>Iterations</label>',
+        '<input id="bb-iter" type="number" value="1" min="1"></div>',
+      '<div class="field"><label>RTT Config (optional)</label>',
+        '<input id="bb-rtt" type="text" placeholder="vcmts10ms.json"></div>',
+    '</div>',
+  '</div>',
+
+  '<div class="card">',
+    '<div class="card-title">Scenarios</div>',
+    '<div class="check-group" id="bb-scenarios">',
+      ['US_Combined','US_Classic_Only','US_LL_Only','DS_Combined','DS_Classic_Only','DS_LL_Only',
+       'US_UDP_NC','DS_UDP_NC','US_LL_1TCP_LL','US_LL_4TCP_LL','DS_LL_1TCP_LL','DS_LL_4TCP_LL',
+       'DS_STVA','DS_STVA_ECT1','US_1000_Packets','DS_1000_Packets'].map(function(s) {
+        return '<label class="check-item" onclick="toggleCheck(this,\'bb-scenarios\',true)">' +
+               '<input type="checkbox" value="' + s + '">' + s + '</label>';
+      }).join(''),
+    '</div>',
+    '<div class="hint" style="margin-top:8px">Select one or more scenarios to run in sequence.</div>',
+  '</div>',
+
+  '<div class="card">',
+    '<div class="btn-row">',
+      '<button class="btn btn-primary" id="bb-run-btn" onclick="bbRun()">&#9654; Run ByteBlower</button>',
+      '<label class="check-item" id="bb-async-chk" onclick="toggleCheck(this,\'bb-async-wrap\',false)">',
+        '<input type="checkbox" id="bb-async" value="async"> Async (background)',
+      '</label>',
+    '</div>',
+    '<div id="bb-alert" style="margin-top:14px"></div>',
+    '<pre class="resp" id="bb-resp"></pre>',
+  '</div>'
+].join('');
+
+// Load BBP files on page load
+(async function bbLoadFiles() {
+  const r = await api('GET', '/api/bb_flows');
+  const sel = document.getElementById('bb-file');
+  if (r.ok && r.data.bb_flows && r.data.bb_flows.length) {
+    sel.innerHTML = r.data.bb_flows.map(function(f) {
+      return '<option value="' + f.name + '">' + f.name + '</option>';
+    }).join('');
+  } else {
+    sel.innerHTML = '<option value="">No .bbp files found</option>';
+  }
+})();
+
+async function bbRun() {
+  const scenarios = getChecked('bb-scenarios');
+  const bbp  = document.getElementById('bb-file').value;
+  const grp  = document.getElementById('bb-group').value.trim();
+  const iter = parseInt(document.getElementById('bb-iter').value) || 1;
+  const rtt  = document.getElementById('bb-rtt').value.trim();
+  const asyncMode = document.getElementById('bb-async').checked;
+  const alrt = document.getElementById('bb-alert');
+
+  if (!bbp)            { alrt.innerHTML = mkAlert('warn','Select a BBP file'); return; }
+  if (!grp)            { alrt.innerHTML = mkAlert('warn','Enter a test group name'); return; }
+  if (!scenarios.length){ alrt.innerHTML = mkAlert('warn','Select at least one scenario'); return; }
+
+  setBusy('bb-run-btn', true, '&#9654; Run ByteBlower');
+  alrt.innerHTML = mkAlert('info', 'Test started...');
+
+  const body = {
+    bbp_file: bbp,
+    scenario: scenarios.join(','),
+    test_group_name: grp,
+    iterations: iter,
+    async: asyncMode
+  };
+  if (rtt) body.rtt_config = rtt;
+
+  const r = await api('POST', '/api/byteblower/run', body);
+  setBusy('bb-run-btn', false, '&#9654; Run ByteBlower');
+
+  if (r.ok) {
+    alrt.innerHTML = mkAlert('success', asyncMode
+      ? 'Test running in background — check Monitor for status. ID: ' + r.data.test_id
+      : 'Test completed successfully.');
+    showResp('bb-resp', r.data);
+  } else {
+    alrt.innerHTML = mkAlert('error', r.data.error || 'Test failed');
+    showResp('bb-resp', r.data);
+  }
+}
+</script>
+
+<script>
+// ── IPERF3 PAGE ──
+document.getElementById('page-iperf3').innerHTML = [
+  '<div class="page-title">iPerf3</div>',
+  '<div class="page-sub">Run iPerf3 throughput tests via SSH to a remote client.</div>',
+
+  '<div class="card">',
+    '<div class="card-title">Client</div>',
+    '<div class="form-grid">',
+      '<div class="field"><label>Platform</label>',
+        '<div class="toggle-row" id="ip-platform">',
+          '<div class="toggle-btn active" data-val="linux" onclick="ipTogglePlatform(this)">Linux</div>',
+          '<div class="toggle-btn" data-val="macos" onclick="ipTogglePlatform(this)">macOS</div>',
+        '</div></div>',
+      '<div class="field"><label>Client IP</label>',
+        '<input id="ip-client" type="text" value="96.37.176.19"></div>',
+      '<div class="field"><label>Test Group Name</label>',
+        '<input id="ip-group" type="text" placeholder="TEST_SCN_RTT_0" value="TEST_SCN_RTT_0"></div>',
+      '<div class="field"><label>Iterations</label>',
+        '<input id="ip-iter" type="number" value="1" min="1"></div>',
+      '<div class="field"><label>RTT Config (optional)</label>',
+        '<input id="ip-rtt" type="text" placeholder="vcmts10ms.json"></div>',
+      '<div class="field"><label>Output Format</label>',
+        '<select id="ip-fmt"><option value="json">JSON</option><option value="txt">TXT</option></select></div>',
+    '</div>',
+  '</div>',
+
+  '<div class="card">',
+    '<div class="card-title">Scenarios</div>',
+    '<div class="check-group" id="ip-scenarios">',
+      ['US_Combined','US_Classic_Only','US_LL_Only','DS_Combined','DS_Classic_Only','DS_LL_Only',
+       'US_UDP_NC','DS_UDP_NC','US_LL_1TCP_LL','US_LL_4TCP_LL','DS_LL_1TCP_LL','DS_LL_4TCP_LL',
+       'DS_STVA','DS_STVA_ECT1','US_1000_Packets','DS_1000_Packets'].map(function(s) {
+        return '<label class="check-item" onclick="toggleCheck(this,\'ip-scenarios\',true)">' +
+               '<input type="checkbox" value="' + s + '">' + s + '</label>';
+      }).join(''),
+    '</div>',
+  '</div>',
+
+  '<div class="card">',
+    '<div class="btn-row">',
+      '<button class="btn btn-primary" id="ip-run-btn" onclick="ipRun()">&#9654; Run iPerf3</button>',
+    '</div>',
+    '<div id="ip-alert" style="margin-top:14px"></div>',
+    '<pre class="resp" id="ip-resp"></pre>',
+  '</div>'
+].join('');
+
+function ipTogglePlatform(el) {
+  document.querySelectorAll('#ip-platform .toggle-btn').forEach(function(b) { b.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById('ip-client').value = el.dataset.val === 'macos' ? '96.37.176.11' : '96.37.176.19';
+}
+
+async function ipRun() {
+  const scenarios = getChecked('ip-scenarios');
+  const client = document.getElementById('ip-client').value.trim();
+  const grp    = document.getElementById('ip-group').value.trim();
+  const iter   = parseInt(document.getElementById('ip-iter').value) || 1;
+  const rtt    = document.getElementById('ip-rtt').value.trim();
+  const fmt    = document.getElementById('ip-fmt').value;
+  const plat   = document.querySelector('#ip-platform .toggle-btn.active').dataset.val;
+  const alrt   = document.getElementById('ip-alert');
+
+  if (!client)          { alrt.innerHTML = mkAlert('warn','Enter a client IP'); return; }
+  if (!grp)             { alrt.innerHTML = mkAlert('warn','Enter a test group name'); return; }
+  if (!scenarios.length){ alrt.innerHTML = mkAlert('warn','Select at least one scenario'); return; }
+
+  setBusy('ip-run-btn', true, '&#9654; Run iPerf3');
+  alrt.innerHTML = mkAlert('info', 'Test running — this may take several minutes...');
+
+  const body = {
+    client_ip: client,
+    scenario: scenarios.join(','),
+    test_group_name: grp,
+    iterations: iter,
+    platform: plat,
+    output_format: fmt
+  };
+  if (rtt) body.rtt_config = rtt;
+
+  const r = await api('POST', '/api/iperf3/run', body);
+  setBusy('ip-run-btn', false, '&#9654; Run iPerf3');
+
+  if (r.ok) {
+    alrt.innerHTML = mkAlert('success', 'Test completed. Output: ' + (r.data.output_dir || ''));
+    showResp('ip-resp', r.data);
+  } else {
+    alrt.innerHTML = mkAlert('error', r.data.error || 'Test failed');
+    showResp('ip-resp', r.data);
+  }
+}
+</script>
+
+<script>
+// ── PACKETSTORM PAGE ──
+document.getElementById('page-packetstorm').innerHTML = [
+  '<div class="page-title">PacketStorm</div>',
+  '<div class="page-sub">Manually start or stop a PacketStorm RTT impairment configuration.</div>',
+
+  '<div class="card">',
+    '<div class="card-title">RTT Configuration</div>',
+    '<div class="form-grid col1">',
+      '<div class="field"><label>RTT Config File</label>',
+        '<input id="ps-config" type="text" placeholder="vcmts10ms.json" value="vcmts10ms.json">',
+        '<div class="hint">Filename from the PacketStorm configs directory.</div>',
+      '</div>',
+    '</div>',
+    '<div class="btn-row">',
+      '<button class="btn btn-green" id="ps-start-btn" onclick="psStart()">&#9654; Start</button>',
+      '<button class="btn btn-red"   id="ps-stop-btn"  onclick="psStop()">&#9632; Stop</button>',
+    '</div>',
+    '<div id="ps-alert" style="margin-top:14px"></div>',
+    '<pre class="resp" id="ps-resp"></pre>',
+  '</div>'
+].join('');
+
+async function psStart() {
+  const cfg  = document.getElementById('ps-config').value.trim();
+  const alrt = document.getElementById('ps-alert');
+  if (!cfg) { alrt.innerHTML = mkAlert('warn','Enter an RTT config filename'); return; }
+  setBusy('ps-start-btn', true, '&#9654; Start');
+  const r = await api('POST', '/api/packetstorm/start', { rtt_config: cfg });
+  setBusy('ps-start-btn', false, '&#9654; Start');
+  alrt.innerHTML = r.ok ? mkAlert('success','PacketStorm started.') : mkAlert('error', r.data.error || 'Failed to start');
+  showResp('ps-resp', r.data);
+}
+
+async function psStop() {
+  const cfg  = document.getElementById('ps-config').value.trim();
+  const alrt = document.getElementById('ps-alert');
+  setBusy('ps-stop-btn', true, '&#9632; Stop');
+  const r = await api('POST', '/api/packetstorm/stop', { rtt_config: cfg || 'default.json' });
+  setBusy('ps-stop-btn', false, '&#9632; Stop');
+  alrt.innerHTML = r.ok ? mkAlert('success','PacketStorm stopped.') : mkAlert('error', r.data.error || 'Failed to stop');
+  showResp('ps-resp', r.data);
+}
+</script>
+
+<script>
+// ── SPEEDTEST PAGE ──
+document.getElementById('page-speedtest').innerHTML = [
+  '<div class="page-title">SpeedTest</div>',
+  '<div class="page-sub">Run speed tests from one or more remote clients to the configured modem.</div>',
+
+  '<div class="card">',
+    '<div class="card-title">Clients</div>',
+    '<div class="check-group" id="st-clients">',
+      ['linux','macos','nvidia','mac_mini','linux_client_2'].map(function(c) {
+        var checked = (c === 'linux' || c === 'macos') ? ' checked' : '';
+        var cls = (c === 'linux' || c === 'macos') ? ' checked' : '';
+        return '<label class="check-item' + cls + '" onclick="toggleCheck(this,\'st-clients\',true)">' +
+               '<input type="checkbox" value="' + c + '"' + checked + '>' + c + '</label>';
+      }).join(''),
+    '</div>',
+  '</div>',
+
+  '<div class="card">',
+    '<div class="card-title">Options</div>',
+    '<div class="form-grid">',
+      '<div class="field"><label>Test Group Name</label>',
+        '<input id="st-group" type="text" value="Speedtest"></div>',
+      '<div class="field"><label>Iterations</label>',
+        '<input id="st-iter" type="number" value="1" min="1"></div>',
+      '<div class="field span2"><label>Target IPv6 (leave blank to use configured modem)</label>',
+        '<input id="st-target" type="text" placeholder="uses modem IPv6 from Setup" style="font-family:monospace"></div>',
+    '</div>',
+  '</div>',
+
+  '<div class="card">',
+    '<div class="btn-row">',
+      '<button class="btn btn-primary" id="st-run-btn" onclick="stRun()">&#9654; Run SpeedTest</button>',
+    '</div>',
+    '<div id="st-alert" style="margin-top:14px"></div>',
+    '<pre class="resp" id="st-resp"></pre>',
+  '</div>'
+].join('');
+
+async function stRun() {
+  const clients = getChecked('st-clients');
+  const grp    = document.getElementById('st-group').value.trim();
+  const iter   = parseInt(document.getElementById('st-iter').value) || 1;
+  const target = document.getElementById('st-target').value.trim();
+  const alrt   = document.getElementById('st-alert');
+
+  if (!clients.length) { alrt.innerHTML = mkAlert('warn','Select at least one client'); return; }
+
+  setBusy('st-run-btn', true, '&#9654; Run SpeedTest');
+  alrt.innerHTML = mkAlert('info', 'Running speed tests...');
+
+  const body = { clients: clients, test_group_name: grp, iterations: iter };
+  if (target) body.target_ip = target;
+
+  const r = await api('POST', '/api/speedtest/run', body);
+  setBusy('st-run-btn', false, '&#9654; Run SpeedTest');
+
+  if (r.ok) {
+    alrt.innerHTML = mkAlert('success', 'SpeedTest completed.');
+    showResp('st-resp', r.data);
+  } else {
+    alrt.innerHTML = mkAlert('error', r.data.error || 'SpeedTest failed');
+    showResp('st-resp', r.data);
+  }
+}
+</script>
+
+<script>
+// ── MONITOR PAGE ──
+document.getElementById('page-monitor').innerHTML = [
+  '<div class="page-title">Active Tests</div>',
+  '<div class="page-sub">Live status of all tests started this session.</div>',
+
+  '<div class="card">',
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">',
+      '<div class="card-title" style="margin:0">Running / Recent</div>',
+      '<button class="btn btn-ghost btn-sm" onclick="monRefresh()">&#8635; Refresh</button>',
+    '</div>',
+    '<div id="mon-body">',
+      '<div style="color:var(--muted);font-size:13px">No tests found. Start a test to see it here.</div>',
+    '</div>',
+  '</div>'
+].join('');
+
+async function monRefresh() {
+  const r = await api('GET', '/api/test/list');
+  const body = document.getElementById('mon-body');
+  if (!r.ok || !r.data.tests || !Object.keys(r.data.tests).length) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:13px">No tests found.</div>';
+    document.getElementById('badge-monitor').textContent = '0';
+    document.getElementById('badge-monitor').classList.remove('show');
+    return;
+  }
+  const tests = r.data.tests;
+  const ids = Object.keys(tests);
+  const running = ids.filter(function(id) { return tests[id].status === 'running'; });
+  document.getElementById('badge-monitor').textContent = running.length;
+  running.length > 0
+    ? document.getElementById('badge-monitor').classList.add('show')
+    : document.getElementById('badge-monitor').classList.remove('show');
+
+  var rows = ids.map(function(id) {
+    var t = tests[id];
+    var statusCls = t.status === 'completed' ? 'badge-green'
+                  : t.status === 'running'   ? 'badge-yellow'
+                  : t.status === 'failed'    ? 'badge-red'
+                  : 'badge-muted';
+    var resultLink = t.result_id
+      ? '<button class="btn btn-ghost btn-sm" onclick="goPage(\'results\')">View Results</button>'
+      : '';
+    return '<tr>' +
+      '<td style="font-family:monospace;font-size:11px">' + id.substring(0,8) + '...</td>' +
+      '<td>' + (t.type || '—') + '</td>' +
+      '<td><span class="badge ' + statusCls + '">' + t.status + '</span></td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + (t.started ? t.started.replace('T',' ').substring(0,19) : '—') + '</td>' +
+      '<td>' + resultLink + '</td>' +
+      '</tr>';
+  }).join('');
+
+  body.innerHTML = '<table class="tbl"><thead><tr>' +
+    '<th>ID</th><th>Type</th><th>Status</th><th>Started</th><th></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+// Auto-refresh monitor every 10s when on that page
+setInterval(function() {
+  if (document.getElementById('page-monitor').classList.contains('active')) {
+    monRefresh();
+  }
+}, 10000);
+
+// Refresh when navigating to monitor
+document.querySelector('.nav-item[data-page="monitor"]').addEventListener('click', function() {
+  setTimeout(monRefresh, 50);
+});
+</script>
+
+<script>
+// ── RESULTS PAGE ──
+document.getElementById('page-results').innerHTML = [
+  '<div class="page-title">Results</div>',
+  '<div class="page-sub">Browse, inspect, and download test result folders.</div>',
+
+  '<div class="card">',
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">',
+      '<div class="card-title" style="margin:0">Result Folders</div>',
+      '<button class="btn btn-ghost btn-sm" onclick="resLoad()">&#8635; Refresh</button>',
+    '</div>',
+    '<div id="res-list"><div style="color:var(--muted);font-size:13px">Loading...</div></div>',
+  '</div>',
+
+  '<div class="card" id="res-detail-card" style="display:none">',
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">',
+      '<div class="card-title" style="margin:0" id="res-detail-title">Files</div>',
+      '<div style="display:flex;gap:8px">',
+        '<button class="btn btn-ghost btn-sm" onclick="resLatency()">&#128200; Latency</button>',
+        '<button class="btn btn-ghost btn-sm" id="res-dl-btn" onclick="resDownload()">&#8595; Download ZIP</button>',
+      '</div>',
+    '</div>',
+    '<div id="res-files"></div>',
+    '<div id="res-latency-out" style="margin-top:14px"></div>',
+  '</div>'
+].join('');
+
+var resCurrentId = null;
+
+async function resLoad() {
+  const r = await api('GET', '/api/results');
+  const el = document.getElementById('res-list');
+  if (!r.ok || !r.data.results || !r.data.results.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px">No results found.</div>';
+    return;
+  }
+  var rows = r.data.results.map(function(res) {
+    var date = res.created ? res.created.replace('T',' ').substring(0,19) : '—';
+    return '<tr>' +
+      '<td style="font-size:12px;font-family:monospace">' + res.name + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + date + '</td>' +
+      '<td><button class="btn btn-ghost btn-sm" onclick="resOpen(\'' + res.id + '\',\'' + res.name.replace(/'/g,'') + '\')">Open</button></td>' +
+      '</tr>';
+  }).join('');
+  el.innerHTML = '<table class="tbl"><thead><tr><th>Name</th><th>Created</th><th></th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+}
+
+async function resOpen(id, name) {
+  resCurrentId = id;
+  document.getElementById('res-detail-title').textContent = name;
+  document.getElementById('res-detail-card').style.display = 'block';
+  document.getElementById('res-latency-out').innerHTML = '';
+  const r = await api('GET', '/api/results/' + id);
+  const el = document.getElementById('res-files');
+  if (!r.ok || !r.data.files || !r.data.files.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px">No files found.</div>';
+    return;
+  }
+  var rows = r.data.files.map(function(f) {
+    var kb = (f.size / 1024).toFixed(1);
+    return '<tr>' +
+      '<td style="font-family:monospace;font-size:12px">' + f.path + '</td>' +
+      '<td style="color:var(--muted);font-size:11px">' + kb + ' KB</td>' +
+      '<td><a href="' + document.getElementById('baseUrl').value.replace(/\/$/,'') +
+        '/api/results/' + id + '/download/' + encodeURIComponent(f.path) +
+        '" target="_blank" class="btn btn-ghost btn-sm">&#8595;</a></td>' +
+      '</tr>';
+  }).join('');
+  el.innerHTML = '<table class="tbl"><thead><tr><th>File</th><th>Size</th><th></th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+  document.getElementById('res-detail-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function resLatency() {
+  if (!resCurrentId) return;
+  const out = document.getElementById('res-latency-out');
+  out.innerHTML = mkAlert('info', 'Loading latency data...');
+  const r = await api('GET', '/api/results/' + resCurrentId + '/latency');
+  if (!r.ok) {
+    out.innerHTML = mkAlert('error', r.data.error || 'No latency data');
+    return;
+  }
+  var flows = r.data.service_flows || [];
+  if (!flows.length) { out.innerHTML = mkAlert('warn','No service flow data found.'); return; }
+  var rows = flows.map(function(sf) {
+    return '<tr>' +
+      '<td>' + sf.sfid + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + (sf.directory || '—') + '</td>' +
+      '<td>' + sf.total_packets.toLocaleString() + '</td>' +
+      '<td>' + sf.p50_ms + '</td>' +
+      '<td>' + sf.p99_ms + '</td>' +
+      '<td>' + sf.p999_ms + '</td>' +
+      '<td>' + sf.throughput_mbps + '</td>' +
+      '<td>' + sf.loss_pct + '%</td>' +
+      '</tr>';
+  }).join('');
+  out.innerHTML = '<table class="tbl"><thead><tr>' +
+    '<th>SFID</th><th>Dir</th><th>Packets</th><th>P50 ms</th><th>P99 ms</th><th>P99.9 ms</th><th>Mbps</th><th>Loss</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function resDownload() {
+  if (!resCurrentId) return;
+  window.open(document.getElementById('baseUrl').value.replace(/\/$/,'') + '/api/results/' + resCurrentId + '/download');
+}
+
+// Load results when navigating to results page
+document.querySelector('.nav-item[data-page="results"]').addEventListener('click', function() {
+  setTimeout(resLoad, 50);
+});
+
+// Initial load
+resLoad();
+</script>
+
 </body>
 </html>

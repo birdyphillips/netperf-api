@@ -1,6 +1,6 @@
-# NetPerf Orchestrator
+# DELTA-API — DOCSIS Enhanced Latency & Throughput Analyzer REST API
 
-**Network Performance Testing Orchestration Tool**
+**Network Performance Testing REST API**
 
 [![Version](https://img.shields.io/badge/version-1.3-blue.svg)](VERSION)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
@@ -8,7 +8,7 @@
 
 ## Overview
 
-NetPerf Orchestrator is a comprehensive network performance testing framework that orchestrates multiple industry-standard tools for automated network quality assessment. It provides unified CLI interface for ByteBlower, PacketStorm, iPerf3, and SpeedTest with integrated SNMP metrics collection.
+DELTA-API is a comprehensive network performance testing framework that orchestrates multiple industry-standard tools for automated network quality assessment. It provides unified CLI interface for ByteBlower, PacketStorm, iPerf3, and SpeedTest with integrated SNMP metrics collection.
 
 ## Key Features
 
@@ -117,4 +117,4 @@ Contributions welcome! This tool is designed for network engineers and QA profes
 
 ---
 
-*NetPerf Orchestrator - Professional Network Performance Testing*
+*DELTA-API — DOCSIS Enhanced Latency & Throughput Analyzer REST API*

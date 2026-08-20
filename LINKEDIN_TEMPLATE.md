@@ -2,7 +2,7 @@
 
 ## Option 1: Technical Focus
 
-🚀 Excited to share my latest project: NetPerf API
+🚀 Excited to share my latest project: DELTA-API
 
 A production-ready REST API for DOCSIS 3.1/4.0 network performance testing that I developed to enable automated, scalable network validation.
 
@@ -24,7 +24,7 @@ Perfect for:
 • Multi-vendor interoperability testing
 
 Live demo with Swagger UI available!
-GitHub: https://github.com/birdyphillips/netperf-api
+GitHub: https://github.com/birdyphillips/delta-docsis-api
 
 #NetworkEngineering #Python #RestAPI #Automation #DOCSIS #API #DevOps #Flask
 
@@ -34,7 +34,7 @@ GitHub: https://github.com/birdyphillips/netperf-api
 
 💡 Problem: Network performance testing tools were CLI-only, making automation and integration difficult.
 
-Solution: I built NetPerf API - a REST API that exposes ByteBlower, iPerf3, PacketStorm, and SpeedTest through HTTP endpoints.
+Solution: I built DELTA-API - a REST API that exposes ByteBlower, iPerf3, PacketStorm, and SpeedTest through HTTP endpoints.
 
 Impact:
 📊 Enabled remote test execution from any platform
@@ -52,7 +52,7 @@ The API includes:
 
 From CLI tool to production API in one project!
 
-GitHub: https://github.com/birdyphillips/netperf-api
+GitHub: https://github.com/birdyphillips/delta-docsis-api
 
 #APIDesign #NetworkAutomation #Python #TestAutomation #SaaS
 
@@ -60,7 +60,7 @@ GitHub: https://github.com/birdyphillips/netperf-api
 
 ## Option 3: Skills Showcase
 
-🛠️ Skills Demonstrated in NetPerf API:
+🛠️ Skills Demonstrated in DELTA-API:
 
 Backend Development:
 • Flask REST API design
@@ -98,7 +98,7 @@ This project showcases my ability to:
 ✓ Deploy network testing infrastructure
 
 Live API: http://24.28.218.10:5000/
-GitHub: https://github.com/birdyphillips/netperf-api
+GitHub: https://github.com/birdyphillips/delta-docsis-api
 
 #Python #RestAPI #Flask #NetworkEngineering #SoftwareDevelopment #Portfolio
 
@@ -108,7 +108,7 @@ GitHub: https://github.com/birdyphillips/netperf-api
 
 💼 Turning Network Testing into a Service
 
-I developed NetPerf API to transform traditional CLI-based network testing into a scalable, API-driven service.
+I developed DELTA-API to transform traditional CLI-based network testing into a scalable, API-driven service.
 
 Business Value:
 💰 Monetization-ready architecture for NTaaS
@@ -138,7 +138,7 @@ Ready for:
 
 This is more than a testing tool - it's a business platform.
 
-GitHub: https://github.com/birdyphillips/netperf-api
+GitHub: https://github.com/birdyphillips/delta-docsis-api
 
 #Entrepreneurship #SaaS #NetworkTesting #API #BusinessDevelopment #TechStartup
 
@@ -163,19 +163,19 @@ Production-ready REST API for DOCSIS 3.1/4.0 network performance testing. Provid
 
 I built two complementary network testing solutions:
 
-**NetPerf Orchestrator (CLI)**
+**DELTA (CLI)**
 • Command-line automation tool
 • Perfect for manual testing & scripts
 • Direct execution on test machines
 • YAML configuration
-• GitHub: netperf-orchestrator
+• GitHub: DELTA
 
-**NetPerf API (REST)**
+**DELTA-API (REST)**
 • HTTP-based service
 • Remote execution from anywhere
 • CI/CD integration ready
 • Swagger documentation
-• GitHub: netperf-api
+• GitHub: DELTA-API
 
 Together they provide:
 ✅ Flexibility: CLI for quick tests, API for automation

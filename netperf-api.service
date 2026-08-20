@@ -1,0 +1,15 @@
+[Unit]
+Description=DELTA-API
+After=network.target
+
+[Service]
+WorkingDirectory=/home/aphillips/Projects/DELTA-API
+ExecStart=/home/aphillips/Projects/DELTA-API/venv/bin/python3 app.py
+Restart=on-failure
+User=aphillips
+Group=aphillips
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

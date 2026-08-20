@@ -47,24 +47,24 @@ swagger_config = {
 swagger_template = {
     "swagger": "2.0",
     "info": {
-        "title": "NetPerf API",
-        "description": """REST API for Network Performance Testing - ByteBlower, iPerf3, PacketStorm, SpeedTest
+        "title": "DELTA-API",
+        "description": """REST API for DOCSIS Enhanced Latency & Throughput Analyzer - ByteBlower, iPerf3, PacketStorm, SpeedTest
 
 ## Documentation
 
-- **GitHub**: [netperf-api](https://github.com/birdyphillips/netperf-api)
-- **Full README**: [Documentation](https://github.com/birdyphillips/netperf-api#readme)
-- **Usage Examples**: [Examples](https://github.com/birdyphillips/netperf-api#-usage-examples)
+- **GitHub**: [DELTA-API](https://github.com/birdyphillips/delta-docsis-api)
+- **Full README**: [Documentation](https://github.com/birdyphillips/delta-docsis-api#readme)
+- **Usage Examples**: [Examples](https://github.com/birdyphillips/delta-docsis-api#-usage-examples)
 - **Postman Collection**: Available in repository
 
 ## Support
 
-For issues or questions, visit the [GitHub repository](https://github.com/birdyphillips/netperf-api).
+For issues or questions, visit the [GitHub repository](https://github.com/birdyphillips/delta-docsis-api).
 """,
         "version": "1.4.0",
         "contact": {
             "name": "birdyphillips",
-            "url": "https://github.com/birdyphillips/netperf-api"
+            "url": "https://github.com/birdyphillips/delta-docsis-api"
         }
     },
     "host": "24.28.218.10:5000",
@@ -1787,6 +1787,10 @@ def download_result_file(result_id, file_path):
         return jsonify({"error": "File not found"}), 404
     
     return send_file(full_path, as_attachment=True)
+
+@app.route('/ui')
+def ui():
+    return send_from_directory('static', 'index.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
